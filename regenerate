@@ -1,0 +1,7 @@
+#!/bin/sh
+
+aclocal -I /home/pierce/src/mine/ncview/ncview-2.0beta3/m4macros
+
+autoconf
+
+

@@ -1,0 +1,8 @@
+
+.First.lib<-function(libname,pkgname){
+    if (@HAVE_NETCDF@)
+        library.dynam("ncdf4",pkgname,libname)
+    else
+        stop("You don't have ncdf4 installed.")
+}
+ 
