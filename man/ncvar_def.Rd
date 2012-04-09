@@ -7,7 +7,7 @@
 }
 \usage{
  ncvar_def( name, units, dim, missval, longname=name, prec="float", 
- shuffle=FALSE, compression=NA, chunksizes=NA )
+ shuffle=FALSE, compression=NA, chunksizes=NA, verbose=FALSE )
 }
 \arguments{
  \item{name}{Name of the variable to be created (character string).  
@@ -18,9 +18,9 @@
  subgroup named \code{run1}, which will hold a variable named \code{Temperature}. Using
  groups forces a netcdf version 4 file to be written. Note that older software might not
  be able to read netcdf version 4 files.}
- \item{units}{The variable's units (character string).}
- \item{dim}{The variable's dimension(s) (one or a list of "ncdim4" class objects, as returned by \code{ncdim_def}).}
- \item{missval}{The variable's missing value.}
+ \item{units}{The variable's units (character string). Or, pass a zero length string ('') to have no units attribute.}
+ \item{dim}{The variable's dimension(s) (one or a list of "ncdim4" class objects, as returned by \code{ncdim_def}).  To create a variable with NO dimensions, pass an empty list ("list()"). }
+ \item{missval}{The variable's missing value. If NO missing value is desired, pass a NULL, or omit this argument entirely. If a NaN missing value is desired, pass an NA.}
  \item{longname}{Optional longer name for the variable, which is assigned to the variable's "long_name" attribute. For example, a variable named "TS" might have the longname "Surface Temperature"}
  \item{prec}{Precision of the created variable.  Valid options: 'short' 'integer' 'float' 'double' 'char'.}
  \item{shuffle}{Turns on (if TRUE) or off (if FALSE, the default) the shuffle filter.  According to 
@@ -39,6 +39,7 @@
  reduce read or write times. See the netcdf documentation for more detail on how to set this
  parameter. Enabling this feature forces the created file to be in netcdf version 4 format,
   which will not be compatible with older software that only reads netcdf version 3 files.}
+ \item{verbose}{Print debugging information.}
 }
 \value{
  An object of class \code{ncvar4} that can later be passed to 

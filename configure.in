@@ -23,8 +23,11 @@ fi
 
 HAVE_NETCDF=TRUE
 
+NETCDF_LDFLAGS="$NETCDF_RPATH $NETCDF_LDFLAGS"
+
 AC_SUBST(NETCDF_CPPFLAGS)
 AC_SUBST(NETCDF_LDFLAGS)
+AC_SUBST(NETCDF_RPATH)
 AC_SUBST(HAVE_NETCDF)
 
 AC_OUTPUT(R/load.R
@@ -33,8 +36,9 @@ AC_OUTPUT(R/load.R
 echo " "
 echo "**********************  Results of ncdf4 package configure *******************"
 echo " "
-echo "netCDF v4 CPP flags = $NETCDF_CPPFLAGS"
-echo "netCDF v4 LD flags  = $NETCDF_LDFLAGS"
+echo "netCDF v4 CPP flags 	= $NETCDF_CPPFLAGS"
+echo "netCDF v4 LD flags  	= $NETCDF_LDFLAGS"
+echo "netCDF v4 runtime path 	= $NETCDF_RPATH"
 echo " "
 echo "******************************************************************************"
 echo " "

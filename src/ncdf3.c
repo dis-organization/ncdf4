@@ -246,12 +246,11 @@ SEXP R_nc4_get_vara_numvarid( SEXP sx_nc, SEXP sx_varid, SEXP sx_start, SEXP sx_
 	int 	varid, ncid, ndims, len_start, len_count, i, j, ierr,
 		start_arg[MAX_NC_DIMS], count_arg[MAX_NC_DIMS],
 		*data_addr_i, missval_i, ndims_cgt1;
-	SEXP 	rv_data, sx_ncdf_var, sx_dim;
+	SEXP 	rv_data = R_NilValue /* -Wall */, sx_ncdf_var, sx_dim;
 	size_t	start[MAX_NC_DIMS], count[MAX_NC_DIMS], varsize[MAX_NC_DIMS], tot_var_size,
 		i_szt;
 	double	*data_addr_d, missval_d, missval_tol;
 	nc_type	vartype;
-	const char *filename = CHAR(STRING_ELT(R_ncu4_getListElement( sx_nc, "filename" ),0));
 
 	/*--------------------------------------------------------------------------- 
 	 * On entry, the following are guaranteed to be integers:

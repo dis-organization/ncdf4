@@ -6,13 +6,24 @@
 
 #include <Rdefines.h>
 
-/* These same values are hard-coded into the R source. Don't change them! */
+/* These same values are hard-coded into the R source. Don't change them! 
+ * Note that they are not the same as values defined in the netcdf
+ * library headers, since I don't want my R code to depend on those 
+ */
 #define R_NC_TYPE_SHORT  1
 #define R_NC_TYPE_INT    2
 #define R_NC_TYPE_FLOAT  3
 #define R_NC_TYPE_DOUBLE 4
 #define R_NC_TYPE_TEXT   5
 #define R_NC_TYPE_BYTE   6
+
+/* New types in netcdf version 4 */
+#define R_NC_TYPE_UBYTE		7
+#define R_NC_TYPE_USHORT	8
+#define R_NC_TYPE_UINT		9
+#define R_NC_TYPE_INT64		10
+#define R_NC_TYPE_UINT64	11
+#define R_NC_TYPE_STRING	12
 
 /*********************************************************************
  * Converts from type "nc_type" to an integer as defined in the beginning 
@@ -34,6 +45,19 @@ int R_nc4_nctype_to_Rtypecode( nc_type nct )
 		return(R_NC_TYPE_DOUBLE);
 	else if( nct == NC_BYTE )
 		return(R_NC_TYPE_BYTE);
+
+	else if( nct == NC_UBYTE )
+		return(R_NC_TYPE_UBYTE);
+	else if( nct == NC_USHORT )
+		return(R_NC_TYPE_USHORT);
+	else if( nct == NC_UINT )
+		return(R_NC_TYPE_UINT);
+	else if( nct == NC_INT64 )
+		return(R_NC_TYPE_INT64);
+	else if( nct == NC_UINT64 )
+		return(R_NC_TYPE_UINT64);
+	else if( nct == NC_STRING )
+		return(R_NC_TYPE_STRING);
 	else
 		return(-1);
 }
@@ -194,13 +218,13 @@ void R_nc4_get_vara_double( int *ncid, int *varid, int *start,
 			nc_strerror(*retval) );
 		Rprintf( "Var: %s  Ndims: %d   Start: ", vn, ndims );
 		for( i=0; i<ndims; i++ ) {
-			Rprintf( "%u", s_start[i] );
+			Rprintf( "%u", (unsigned int)s_start[i] );
 			if( i < ndims-1 )
 				Rprintf( "," );
 			}
 		Rprintf( "Count: " );
 		for( i=0; i<ndims; i++ ) {
-			Rprintf( "%u", s_count[i] );
+			Rprintf( "%u", (unsigned int)s_count[i] );
 			if( i < ndims-1 )
 				Rprintf( "," );
 			}
@@ -237,13 +261,13 @@ void R_nc4_get_vara_int( int *ncid, int *varid, int *start,
 			nc_strerror(*retval) );
 		Rprintf( "Var: %s  Ndims: %d   Start: ", vn, ndims );
 		for( i=0; i<ndims; i++ ) {
-			Rprintf( "%u", s_start[i] );
+			Rprintf( "%u", (unsigned int)s_start[i] );
 			if( i < ndims-1 )
 				Rprintf( "," );
 			}
 		Rprintf( "Count: " );
 		for( i=0; i<ndims; i++ ) {
-			Rprintf( "%u", s_count[i] );
+			Rprintf( "%u", (unsigned int)s_count[i] );
 			if( i < ndims-1 )
 				Rprintf( "," );
 			}
@@ -294,13 +318,13 @@ void R_nc4_get_vara_text( int *ncid, int *varid, int *start,
 			nc_strerror(*retval) );
 		Rprintf( "Var: %s  Ndims: %d   Start: ", vn, ndims );
 		for( i=0; i<ndims; i++ ) {
-			Rprintf( "%u", s_start[i] );
+			Rprintf( "%u", (unsigned int)s_start[i] );
 			if( i < ndims-1 )
 				Rprintf( "," );
 			}
 		Rprintf( "Count: " );
 		for( i=0; i<ndims; i++ ) {
-			Rprintf( "%u", s_count[i] );
+			Rprintf( "%u", (unsigned int)s_count[i] );
 			if( i < ndims-1 )
 				Rprintf( "," );
 			}
@@ -501,9 +525,63 @@ nc_type R_nc4_ttc_to_nctype( int type_to_create )
 	if( type_to_create == 6 )
 		return( NC_BYTE );
 
-	Rprintf("Error, R_nc4_ttc_to_nctype passed unknown value: %d\n",
+	error("Error, R_nc4_ttc_to_nctype passed unknown value: %d\n",
 		type_to_create );
-	exit(-1);
+	return( NC_BYTE ); /* -Wall */
+}
+
+/*********************************************************************/
+/* NOTE that NA's are handled through this vector.  According to the 
+ * docs as of 2010-11-02, NA's have the value MIN_INT */
+void R_nc4_put_att_logical( int *ncid, int *varid, char **attname, 
+		int *type_to_create, int *natts, int *attribute, int *retval )
+{
+	int	R_NA_val;
+	float	C_NA_val_f;
+	double 	C_NA_val_d;
+
+	/* Rprintf( "in R_nc4_put_att_logical with val=%d\n", *attribute ); */
+	nc_type ttc;
+	ttc = R_nc4_ttc_to_nctype( *type_to_create );
+
+	R_NA_val = -2147483648;		/* From R docs */
+
+	if( *attribute == R_NA_val ) {
+		/* Rprintf( "PUTTING a NA -- float \n" ); */
+		/* Put a NA */
+		if( ttc == NC_FLOAT ) {
+			C_NA_val_f = 0./0.;
+			*retval = nc_put_att_float(*ncid, *varid, attname[0], 
+				ttc, *natts, &C_NA_val_f );
+			if( *retval != NC_NOERR ) 
+				Rprintf( "Error in R_nc4_put_att_logical: %s\n", 
+					nc_strerror(*retval) );
+			}
+
+		else if( ttc == NC_DOUBLE ) {
+			/* Rprintf( "PUTTING a NA -- double \n" ); */
+			C_NA_val_d = 0./0.;
+			*retval = nc_put_att_double(*ncid, *varid, attname[0], 
+				ttc, *natts, &C_NA_val_d );
+			if( *retval != NC_NOERR ) 
+				Rprintf( "Error in R_nc4_put_att_logical: %s\n", 
+					nc_strerror(*retval) );
+			}
+		else
+			{
+			Rprintf( "Error in R_nc4_put_att_logical: asked to put a NA value, but the variable's type is not a double or float, which are the only two types that have a defined NaN value\n" );
+			*retval = -1;
+			return;
+			}
+
+		}
+	else
+		*retval = nc_put_att_int(*ncid, *varid, attname[0], 
+			ttc, *natts, attribute );
+
+	if( *retval != NC_NOERR ) 
+		Rprintf( "Error in R_nc4_put_att_logical: %s\n", 
+			nc_strerror(*retval) );
 }
 
 /*********************************************************************/
@@ -1208,7 +1286,7 @@ SEXP R_nc4_blankstring(SEXP size)
 */
 SEXP R_nc4_grpname(SEXP sx_root_id, SEXP sx_ierr_retval)
 {
-	int	i, root_id, ierr;
+	int	root_id, ierr;
 	size_t	nchar;
 	char	*str;
 	SEXP	sx_retval, sx_string;
@@ -1266,7 +1344,7 @@ SEXP R_nc4_grpname(SEXP sx_root_id, SEXP sx_ierr_retval)
 */
 SEXP R_nc4_inq_format(SEXP sx_root_id, SEXP sx_ierr_retval)
 {
-	int	i, root_id, ierr;
+	int	root_id, ierr;
 	int	iformat, iretval;
 	SEXP	sx_retval;
 

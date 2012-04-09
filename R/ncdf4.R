@@ -124,7 +124,7 @@
 #======================================================================================================
 nc_version <- function() {
 	
-	return("1.0_20100223")
+	return("ncdf4_1.6_20120409")
 
 }
 
@@ -260,7 +260,7 @@ print.ncdf4 <- function( x, ... ) {
 			#----------------------------
 			# Handle chunking information
 			#----------------------------
-			if( nc$var[[i]]$storage == 1 )
+			if( is.null(nc$var[[i]]$storage) || nc$var[[i]]$storage == 1 )
 				chunk_tag = "  (Contiguous storage)"
 			else
 				{
@@ -355,8 +355,12 @@ print.ncdf4 <- function( x, ... ) {
 # if missval is set to NA, then *no* missing value will be created for the 
 # variable.
 #
+# To make a var with no dims, pass an empty list: "list()"
+
 ncvar_def <- function( name, units, dim, missval, longname=name, prec="float", 
-		shuffle=FALSE, compression=NA, chunksizes=NA ) {
+		shuffle=FALSE, compression=NA, chunksizes=NA, verbose=FALSE ) {
+
+	if( verbose ) print('ncvar_def: entering')
 
 	#-----------------------------------
 	# Check inputs for reasonable values
@@ -372,6 +376,7 @@ ncvar_def <- function( name, units, dim, missval, longname=name, prec="float",
 	if( prec == 'single' )
 		prec = 'float'
 
+	if( verbose ) print(paste('ncvar_def: prec=', prec))
 	if( !is.na(compression)) {
 		if(!is.numeric(compression))
 			stop("Compression parameter, if supplied, must be an integer between 1 (least compression) and 9 (most compression)") 
@@ -385,27 +390,43 @@ ncvar_def <- function( name, units, dim, missval, longname=name, prec="float",
 			stop("Chunksizes parameter, if supplied, must be a vector of integers with length equal to the dimension of the variable")
 		}
 
-	if( shuffle && (prec != "integer"))
-		print(paste("Warning: shuffle is turned on for variable", name, "but that var is of precision", prec,
-			"and shuffle ONLY has an effect for integer variables."))
+	if( shuffle ) {
+		if( (prec == "float") || (prec == "double") || (prec == "single") )
+			print(paste("Warning: shuffle is turned on for variable", name, "but that var is of precision", prec,
+				"and shuffle ONLY has an effect for integer variables."))
+		if( is.na(compression))
+			print(paste("Warning: shuffle is turned on for variable", name, "but compression is NOT turned on. Quoting from the netCDF docs: 'There is no benefit from using the shuffle filter without also using compression.'"))
+		}	
 
 	if( substr(name,1,1) == '/' )
 		stop(paste("Error: passed var name", name, "starts with a slash.  Fully qualified var names can NEVER start with a slash (this is required for backwards compatability).  Leave off any leading slash!"))
 
-	if( storage.mode(missval) == "character" )
-		prec <- 'char'
-
 	#----------------------
 	# Make our ncvar object
 	#----------------------
+	if( verbose ) print(paste('ncvar_def: making ncvar object for var', name ))
 	var <- list()
 	var$name     	<- name 	# Note this is a fully qualifed var name and never starts with a slash 
 	var$units    	<- units
-	var$missval  	<- missval
 	var$longname 	<- longname
 	var$shuffle  	<- shuffle
 	var$compression <- compression
 	var$chunksizes  <- chunksizes	# a vector of integers; the length of the vector == ndims
+
+	#----------------------------------------------------------------------------------
+	# New: in 1.1, you can specify NOT to have a missing value by NOT passing a missing
+	# value argument at all. Also, you can now specify a missing value of NA by passing
+	# a NA.
+	#----------------------------------------------------------------------------------
+	if( missing(missval) || is.null(missval))
+		var$make_missing_value = FALSE
+	else
+		{
+		var$make_missing_value = TRUE
+		var$missval  	<- missval
+		if( storage.mode(missval) == "character" )
+			prec <- 'char'
+		}
 
 	#---------------------------------------------------------------------------
 	# In netcdf v4, there can be multiple vars with the same name and same ID,
@@ -440,11 +461,13 @@ ncvar_def <- function( name, units, dim, missval, longname=name, prec="float",
 		dim <- list(dim)
 	var$dim  <- dim
 	var$ndims <- length(var$dim)
-	for( i in 1:var$ndims ) {
-		if( class(var$dim[[i]]) != "ncdim4" ) {
-			print(paste("Error, passed variable has a dim that is NOT of class ncdim4!"))
-			print(paste("Error occurred when processing dim number",i,"of variable",var$name))
-			stop(paste("This dim has class:", class(var$dim[[i]])))
+	if( var$ndims > 0 ) {
+		for( i in 1:var$ndims ) {
+			if( class(var$dim[[i]]) != "ncdim4" ) {
+				print(paste("Error, passed variable has a dim that is NOT of class ncdim4!"))
+				print(paste("Error occurred when processing dim number",i,"of variable",var$name))
+				stop(paste("This dim has class:", class(var$dim[[i]])))
+				}
 			}
 		}
 
@@ -478,6 +501,8 @@ ncvar_def <- function( name, units, dim, missval, longname=name, prec="float",
 # accessing the ncid$dim[[DIMNAME]]$vals array.
 #
 nc_open <- function( filename, write=FALSE, readunlim=TRUE, verbose=FALSE ) {
+
+	if( verbose ) print(paste("nc_open: entering, package version", nc_version() ))
 
 	if( (! is.character(filename)) || (nchar(filename) < 1))
 		stop("Passed a filename that is NOT a string of characters!")
@@ -806,13 +831,27 @@ nc_open <- function( filename, write=FALSE, readunlim=TRUE, verbose=FALSE ) {
 				# Get this var's missing value, or set to
 				# a default value if it does not have one
 				#----------------------------------------
+				found_mv <- FALSE
 				mv <- ncatt_get_inner( groups[[ig]]$id, ivar-1, "missing_value" )  # ivar-1 because ncvar_inq takes input in C standard, which starts at 0
-				if( mv$hasatt )
+				if( mv$hasatt ) {
+					found_mv <- TRUE
 					v$missval <- mv$value
-				else if( (v$prec=="float") || (v$prec=="double"))
-					v$missval <- default_missval_ncdf4()
+					}
 				else
-					v$missval <- NA
+					{
+					mv <- ncatt_get_inner( groups[[ig]]$id, ivar-1, "_FillValue" )  # ivar-1 because ncvar_inq takes input in C standard, which starts at 0
+					if( mv$hasatt ) {
+						found_mv <- TRUE
+						v$missval <- mv$value
+						}
+					}
+
+				if( ! found_mv ) {
+					if( (v$prec=="float") || (v$prec=="double"))
+						v$missval <- default_missval_ncdf4()
+					else
+						v$missval <- NA
+					}
 
 				#--------------------------------------------
 				# Special check for noncompliant netCDF files
@@ -887,6 +926,8 @@ ncvar_change_missval <- function( nc, varid, missval ) {
 		stop("ncvar_change_missval: the netcdf file was NOT opened in write mode!")
 
 	idobj <- vobjtovarid4( nc, varid )	# object of type 'ncid', NOT just a simple integer
+	if( idobj == -1 ) 
+		stop(paste("error: could not find passed variable in the specified netcdf file. Are you sure it's actually in that file?"))
 	idx   <- idobj$list_index
 	if( idx < 1 )
 		stop(paste("Error, did not specify enough information to identify where var is on the global var list. Are you trying to change the missing value for a dimvar? That operation is not supported"))
@@ -910,6 +951,8 @@ ncvar_change_missval <- function( nc, varid, missval ) {
 #
 nc_create <- function( filename, vars, force_v4=FALSE, verbose=FALSE ) {
 
+	if( verbose ) print(paste('nc_create: entering, package version', nc_version() ))
+
 	if( (! is.character(filename)) || (nchar(filename)<1))
 		stop("input filename must be a character string")
 
@@ -922,15 +965,21 @@ nc_create <- function( filename, vars, force_v4=FALSE, verbose=FALSE ) {
 	if( is.character(class(vars)) && (class(vars) == "ncvar4") ) {
 		vars <- list(vars)
 		if( verbose )
-			print("create.ncdf: input was a single var")
+			print("nc_create: input was a single var")
 		}
 	else if(is.character(class(vars)) && (class(vars) == "list") ) { 
 		if( length(vars) < 1 ) 
 			stop("Error, at least one ncvar object must be supplied in the vars list")
 		if( (! is.character(class(vars[[1]]))) || (class(vars[[1]]) != "ncvar4"))
 			stop("Error, second arg must either be a ncvar object (created by a call to ncvar_def()) or a list of ncvar objects")
+		#-------------------------------------------------------
+		# Make sure ALL elements in the list are of class ncvar4
+		#-------------------------------------------------------
+		for( ilist in nc4_loop(2,length(vars)) )
+			if( (! is.character(class(vars[[ilist]]))) || (class(vars[[ilist]]) != "ncvar4"))
+				stop(paste("Error, found an element of the vars list that is NOT an object created by a call to ncvar_def...element #",ilist,sep=''))
 		if( verbose )
-			print("create.ncdf: input was a list of vars")
+			print("nc_create: input was a list of vars")
 		}
 	else
 		stop("Error, second arg must either be a ncvar object (created by a call to ncvar_def()) or a list of ncvar objects")
@@ -938,7 +987,8 @@ nc_create <- function( filename, vars, force_v4=FALSE, verbose=FALSE ) {
 	#------------------------------------------------------------
 	# Figure out the list of all groups that we will be creating.
 	#------------------------------------------------------------
-	group <- nc_parse_group_structure( vars )
+	if( verbose ) print('nc_create: parsing group structure')
+	group <- nc_parse_group_structure( vars, verbose=verbose )
 	if( length(group) > 1 ) {
 		if( verbose ) print("Forcing netcdf version 4 format file since there is more than 1 group")
 		force_v4 <- TRUE
@@ -947,6 +997,7 @@ nc_create <- function( filename, vars, force_v4=FALSE, verbose=FALSE ) {
 	#-----------------------------------------------------------------------
 	# If any variables use compression or chunking, we must create a V4 file
 	#-----------------------------------------------------------------------
+	if( verbose ) print('nc_create: checking to see if we MUST produce a netcdf-version 4 file')
 	for( ivar in 1:length(vars)) {
 		use_shuffle     = vars[[ivar]]$shuffle
 		use_compression = (! is.na(vars[[ivar]]$compression))
@@ -958,27 +1009,42 @@ nc_create <- function( filename, vars, force_v4=FALSE, verbose=FALSE ) {
 			if( verbose ) print("Forcing netcdf version 4 format file since a var using compression or chunking")
 			force_v4 = TRUE
 			}
+		else
+			{
+			if( verbose ) print("Not forcing netcdf version 4 format file since no var is using compression or chunking")
+			}
 		}
 
 	#---------------------------------------------------------------------
 	# If there are multiple unlimited dimensions, we must create a V4 file
 	#---------------------------------------------------------------------
+	if( verbose ) print('nc_create: checking to see if there are multiple unlimited dims (which would force V4 file)')
 	unlim_dimname = ''
+	multi_unlim_dims = FALSE
 	for( ivar in 1:length(vars)) {
 		ndims = vars[[ivar]]$ndims
-		for( idim in 1:ndims ) {
-			if( vars[[ivar]]$dim[[idim]]$unlim ) {
-				if( nchar(unlim_dimname) == 0 ) 
-					unlim_dimname = vars[[ivar]]$dim[[idim]]$name
-				else
-					if( vars[[ivar]]$dim[[idim]]$name != unlim_dimname ) {
-						if( verbose ) print(paste("Forcing netcdf version 4 format file",
-							"since there is more than 1 unlimited dim"))
-						force_v4 = TRUE
-						break
-						}
+		if( ndims > 0 ) {
+			for( idim in 1:ndims ) {
+				if( vars[[ivar]]$dim[[idim]]$unlim ) {
+					if( nchar(unlim_dimname) == 0 ) 
+						unlim_dimname = vars[[ivar]]$dim[[idim]]$name
+					else
+						if( vars[[ivar]]$dim[[idim]]$name != unlim_dimname ) {
+							if( verbose ) print(paste("Forcing netcdf version 4 format file",
+								"since there is more than 1 unlimited dim"))
+							force_v4 = TRUE
+							multi_unlim_dims = TRUE
+							break
+							}
+					}
 				}
 			}
+		}
+	if( verbose ) {
+		if( multi_unlim_dims )
+			print('nc_create: Yes, there ARE multiple unlimited dims in this file, forcing V4')
+		else
+			print('nc_create: No, there are not any multiple unlimited dims in this file')
 		}
 
 	nc <- list()
@@ -1031,7 +1097,7 @@ nc_create <- function( filename, vars, force_v4=FALSE, verbose=FALSE ) {
 	nc$fqgn2Rindex[["/"]] <- 1		# the root group is always the first entry on the group list
 	if( nc$ngroups > 1 ) {
 		if( verbose )
-			print(paste("create.ncdf: about to create the",nc$ngroups-1,"non-root groups"))
+			print(paste("nc_create: about to create the",nc$ngroups-1,"non-root groups"))
 		for( ig in 2:nc$ngroups ) {	# Note: skip root group
 			group_name <- nc$group[[ig]]$name
 			fqgn       <- nc$group[[ig]]$fqgn		# fully qualified group name
@@ -1072,8 +1138,7 @@ nc_create <- function( filename, vars, force_v4=FALSE, verbose=FALSE ) {
 	# Note also that the returned 'nc' value is updated each time
 	# this subroutine is called.
 	#---------------------------------------------------------------
-	if( verbose )
-		print("create.ncdf: about to create the vars")
+	if( verbose ) print("nc_create: about to create the vars")
 	for(ivar in 1:length(vars)) 
 		nc <- ncvar_add( nc, vars[[ivar]], verbose=verbose, indefine=TRUE )
 
@@ -1082,18 +1147,20 @@ nc_create <- function( filename, vars, force_v4=FALSE, verbose=FALSE ) {
 	# we can access them by FULLY QUALIFIED name instead of only 
 	# by position
 	#-----------------------------------------------------------
+	if( verbose ) print("nc_create: setting names attribute on $var and $dim lists")
 	varnames <- array('',nc$nvars)
-	for( ivar in 1:nc$nvars )
+	for( ivar in nc4_loop(1,nc$nvars))
 		varnames[ivar] <- nc$var[[ivar]]$name
 	attr(nc$var,"names") <- varnames
 	dimnames <- array('',nc$ndims)
-	for( idim in 1:nc$ndims )
+	for( idim in nc4_loop(1,nc$ndims) )
 		dimnames[idim] <- nc$dim[[idim]]$name
 	attr(nc$dim,"names") <- dimnames
 
 	#-----------------
 	# Exit define mode
 	#-----------------
+	if( verbose ) print("nc_create: exiting define mode")
 	nc_enddef( nc )
 
 	#-----------------------------------------------------------------------
@@ -1117,7 +1184,7 @@ nc_create <- function( filename, vars, force_v4=FALSE, verbose=FALSE ) {
 # an already defined variable (accomplished via "ncvar_def")
 # to an ALREADY EXISTING netcdf file.  Normally, when making
 # a new netcdf file from scratch, a list of vars to be created
-# would be passed to "create.ncdf"; this is the preferred method
+# would be passed to "nc_create"; this is the preferred method
 # of putting vars in a file.  However, sometimes it's necessary
 # to add a var to an already-existing file; that's what this
 # routine is for.
@@ -1157,7 +1224,7 @@ ncvar_add <- function( nc, v, verbose=FALSE, indefine=FALSE ) {
 	dimvarids <- array(0,nd)
 	if( verbose )
 		print(paste("ncvar_add: creating",nd,"dims for var",v$name))
-	for( idim in 1:nd ) {
+	for( idim in nc4_loop(1,nd) ) {
 		d <- v$dim[[idim]]
 		if( verbose )
 			print(paste("ncvar_add: working on dim >",d$name,"< (number",idim,") for var",v$name))
@@ -1229,7 +1296,8 @@ ncvar_add <- function( nc, v, verbose=FALSE, indefine=FALSE ) {
 	# ordering and we are using the C netCDF interface
 	#----------------------------------------------------
 	dimids <- dimvarids
-	dimids <- dimids[length(dimids):1]
+	if( nd > 0 ) 
+		dimids <- dimids[length(dimids):1]
 	newvar       <- list()
 	newvar$id    <- -1
 	newvar$error <- -1
@@ -1253,12 +1321,13 @@ ncvar_add <- function( nc, v, verbose=FALSE, indefine=FALSE ) {
 	else if( v$prec == "byte" )
 		funcname <- "R_nc4_def_var_byte"
 	else
-		stop(paste("internal error in create.ncdf: var has unknown precision:",v$prec,". Known vals: short float double integer char byte"))
+		stop(paste("internal error in nc_create: var has unknown precision:",v$prec,". Known vals: short float double integer char byte"))
 
 	#-----------------------------------------------------------------------
 	# Figure out the ncid to use.  If this var is in the root group, it will
 	# just be the ncid.  Otherwise, it will be the group id
 	#-----------------------------------------------------------------------
+	if( verbose ) print('ncvar_add: figuring out ncid to use')
 	if( nslashes_ncdf4( v$name ) == 0 ) 
 		gidx <- 1
 	else
@@ -1270,6 +1339,7 @@ ncvar_add <- function( nc, v, verbose=FALSE, indefine=FALSE ) {
 		}
 	ncid2use <- nc$group[[gidx]]$id
 	name2use <- nc4_basename( v$name )
+	if( verbose ) print(paste('ncvar_add: ncid2use=', ncid2use, 'name2use=', name2use ))
 
 	#---------------------------------
 	# Now actually create the variable
@@ -1283,7 +1353,7 @@ ncvar_add <- function( nc, v, verbose=FALSE, indefine=FALSE ) {
 		error=as.integer(newvar$error),
 		PACKAGE="ncdf4")
 	if( verbose )
-		print(paste("create.ncdf: C call returned value",newvar$error))
+		print(paste("nc_create: C call returned value",newvar$error))
 	if( newvar$error != 0 ) {
 		print('----------------------')
 		print(paste('Var: ', v$name))
@@ -1301,6 +1371,7 @@ ncvar_add <- function( nc, v, verbose=FALSE, indefine=FALSE ) {
 	# Set compression parameters if requested
 	#----------------------------------------
 	if( v$shuffle || (! is.na(v$compression))) {
+		if( verbose ) print(paste("nc_var_add: setting compression params"))
 		if( v$shuffle )
 			shuffle_param = 1
 		else
@@ -1321,6 +1392,7 @@ ncvar_add <- function( nc, v, verbose=FALSE, indefine=FALSE ) {
 	# Set chunking parameters if requested
 	#-------------------------------------
 	if( (length(v$chunksizes)>1) || (! is.na(v$chunksizes)) ) {
+		if( verbose ) print(paste("nc_var_add: setting chunking params"))
 		chunksizes = as.integer(v$chunksizes)
 		#--------------------------------------------------------------
 		# Make sure no chunksize is larger than a fixed (non-unlim) dim
@@ -1346,24 +1418,37 @@ ncvar_add <- function( nc, v, verbose=FALSE, indefine=FALSE ) {
 	#------------------------------------------------------
 	# Add the attributes -- units, missing_value, long_name
 	#------------------------------------------------------
+	if( verbose ) print(paste("nc_var_add: adding attributes"))
 	if( (! is.null( v$units )) && (! is.na(v$units)) && (nchar(v$units)>0)) 
 		ncatt_put_inner( ncid2use, newvar$id, "units", v$units, definemode=TRUE )
 
-	if( is.null( v$missval ) && ((v$prec=="float") || (v$prec=="double"))) {
-		ncatt_put_inner( ncid2use, newvar$id, "missing_value", default_missval_ncdf4(), definemode=TRUE )
-		}
-	else
-		{
-		if( ! is.na(v$missval) ) {
-			ncatt_put_inner( ncid2use, newvar$id, "missing_value", v$missval, definemode=TRUE, verbose=verbose, prec=v$prec )
+	#------------------------------------
+	# Create a missing value if requested
+	#------------------------------------
+	if( verbose ) print(paste("nc_var_add: creating missing value if requested"))
+	if( v$make_missing_value ) {
+		if( is.null( v$missval ) && ((v$prec=="float") || (v$prec=="double"))) {
+			ncatt_put_inner( ncid2use, newvar$id, "_FillValue", default_missval_ncdf4(), definemode=TRUE )
+			}
+		else
+			{
+			if( ! is.null(v$missval) ) {
+				ncatt_put_inner( ncid2use, newvar$id, "_FillValue", v$missval, definemode=TRUE, verbose=verbose, prec=v$prec )
+				}
 			}
 		}
+
+	#-------------------------
+	# Make long name attribute
+	#-------------------------
+	if( verbose ) print(paste("nc_var_add: creating long name attribute"))
 	if( (v$longname != v$name) && (nchar(v$longname)>0))
 		ncatt_put_inner( ncid2use, newvar$id, "long_name", v$longname, definemode=TRUE )
 
 	if( ! indefine )
 		nc_enddef( nc )	# Exit define mode
 
+	if( verbose ) print(paste("nc_var_add: returning"))
 	return(nc)
 }
 
@@ -1450,6 +1535,8 @@ ncatt_get <- function( nc, varid, attname=NA, verbose=FALSE ) {
 ncatt_put <- function( nc, varid, attname, attval, prec=NA, 
 				verbose=FALSE, definemode=FALSE ) {
 
+	if( verbose ) print('ncatt_put: entering' )
+
 	if( class(nc) != "ncdf4" ) 
 		stop("Error, first passed argument must be an object of class ncdf4")
 
@@ -1462,6 +1549,7 @@ ncatt_put <- function( nc, varid, attname, attval, prec=NA,
 	#----------------------------------------------------------------------------
 	# Atts have a special case where an integer 0 means to access the global atts
 	#----------------------------------------------------------------------------
+	if( verbose ) print('ncatt_put: checking for a global att' )
 	if( is.numeric(varid) && (varid == 0)) 
 		is_global = TRUE
 	else
@@ -1472,15 +1560,17 @@ ncatt_put <- function( nc, varid, attname, attval, prec=NA,
 		}
 
 	if( is_global ) {
+		if( verbose ) print('ncatt_put: IS a global att' )
 		ncatt_put_inner( nc$id, -1, attname, attval, prec=prec, verbose=verbose, definemode=definemode )
 		}
 	else
 		{
-		if( verbose )
-			print(paste("Making attribute",attname,"with value",attval,"for ncid=",idobj$group_id,
-			"and varid=",idobj$id))
+		if( verbose ) print('ncatt_put: is NOT a global att' )
 
 		idobj <- vobjtovarid4( nc, varid, allowdimvar=TRUE )	# an object of type "ncid", NOT just a simple integer
+		if( verbose ) 
+			print(paste("Making attribute",attname,"with value",attval,"for ncid=",idobj$group_id,
+				"and varid=",idobj$id))
 
 		#----------------------------------------------------------------------
 		# It is possible to identify a dimvar but not actually have that dimvar
@@ -1489,8 +1579,12 @@ ncatt_put <- function( nc, varid, attname, attval, prec=NA,
 		if( idobj$isdimvar && (idobj$id == -1))
 			stop(paste("dimension", varid$name, "in file", nc$filename, "does NOT have a dimvar, so you cannot call ncatt_put with the name of that dimension to try to put an attribute on the dimvar"))
 
+		if( verbose ) print('ncatt_put: calling ncatt_put_inner')
 		ncatt_put_inner( idobj$group_id, idobj$id, attname, attval, prec=prec, verbose=verbose, definemode=definemode )
+		if( verbose ) print('ncatt_put: back from ncatt_put_inner')
 		}
+
+	if( verbose ) print('ncatt_put: exiting')
 }
 
 #===============================================================================================
@@ -1507,7 +1601,7 @@ ncatt_put <- function( nc, varid, attname, attval, prec=NA,
 # Otherwise, if varid is a character string, it must be the fully
 # qualified var name.  (Note that it could also be a DIMVAR name.)
 #
-ncvar_put <- function( nc, varid=NA, vals=NA, start=NA, count=NA, verbose=FALSE ) {
+ncvar_put <- function( nc, varid=NA, vals=NULL, start=NA, count=NA, verbose=FALSE ) {
 
 	if( class(nc) != 'ncdf4' )
 		stop(paste("Error: first argument to ncvar_put must be an object of type ncdf,",
@@ -1520,8 +1614,21 @@ ncvar_put <- function( nc, varid=NA, vals=NA, start=NA, count=NA, verbose=FALSE 
 			"in different groups), then the fully qualified var name must be given, for",
 			"example, model1/run5/Temperature"))
 
-	if( (length(vals)==1) && is.na(vals) ) 
-		stop("requires a vals argument to be set, and not NA (to set a single NA, use c(NA))")
+	#-----------------------------------------------------------------------------------
+	# Exactly why we do the following is obscure.  Note that DIMVARS are not kept on 
+	# the 'variable' list for the file.  So if we explicitly make a dimvar, then pass
+	# that ncvar object to this routine, it will ordinarily fail because no 'var' 
+	# matching that dimvar will be found.  This however works if we pass the NAME of
+	# the dimvar, because that is matched on the dimvar list as well as the var list.
+	# To avoid this error, we force all matches to be by name, rather than by var object
+	#-----------------------------------------------------------------------------------
+	if( (class(varid) == 'ncvar4') || (class(varid) == 'ncdim4')) {
+		varid = varid$name
+		if( verbose ) print(paste("ncvar_put: converting passed ncvar4/ncdim4 object to the name:", varid))
+		}
+
+	if( is.null(vals))
+		stop("requires a vals argument to be set")
 
 	if( verbose ) {
 		if( mode(varid) == 'character')
@@ -1534,7 +1641,7 @@ ncvar_put <- function( nc, varid=NA, vals=NA, start=NA, count=NA, verbose=FALSE 
 	#-----------------------------------------------------------------
 	# Identify exactly what var (or dimvar) we will be putting data to
 	#-----------------------------------------------------------------
-	idobj = vobjtovarid4( nc, varid, allowdimvar=TRUE )	# NOTE: not a simple integer, but a ncid4 class object with $id, $group_index, $group_id, $list_index
+	idobj = vobjtovarid4( nc, varid, allowdimvar=TRUE, verbose=verbose )	# NOTE: not a simple integer, but a ncid4 class object with $id, $group_index, $group_id, $list_index
 	ncid2use   = idobj$group_id
 	varid2use  = idobj$id
 	varidx2use = idobj$list_index	# this is the index into the nc$vars[[]] list that indictes this variable
@@ -1617,9 +1724,9 @@ ncvar_put <- function( nc, varid=NA, vals=NA, start=NA, count=NA, verbose=FALSE 
 	#---------------------------------
 	# Get the correct type of variable
 	#---------------------------------
-	precint <- ncvar_type( ncid2use, varid2use ) # 1=short, 2=int, 3=float, 4=double, 5=char, 6=byte
+	precint <- ncvar_type( ncid2use, varid2use ) # 1=short, 2=int, 3=float, 4=double, 5=char, 6=byte, 7=ubyte, 8=ushort, 9=uint, 10=int64, 11=uint64, 12=string
 	if( verbose )
-		print(paste("Putting var of type",precint," (1=short, 2=int, 3=float, 4=double, 5=char, 6=byte)"))
+		print(paste("Putting var of type",precint," (1=short, 2=int, 3=float, 4=double, 5=char, 6=byte, 7=ubyte, 8=ushort, 9=uint, 10=int64, 11=uint64, 12=string)"))
 
 	#----------------------------------------------------------
 	# Sanity check to make sure we have at least as many values 
@@ -1648,10 +1755,10 @@ ncvar_put <- function( nc, varid=NA, vals=NA, start=NA, count=NA, verbose=FALSE 
 		print("and C-style start=")
 		print(c.start)
 		}
-	if( (precint == 1) || (precint == 2) || (precint == 6)) {
-		#--------------------
-		# Short, Int, or Byte
-		#--------------------
+	if( (precint == 1) || (precint == 2) || (precint == 6) || (precint == 7) || (precint == 8) || (precint == 9)) {
+		#--------------------------------------
+		# Short, Int, Byte, UByte, UShort, UInt 
+		#--------------------------------------
 		rv <- .C("R_nc4_put_vara_int", 
 			as.integer(ncid2use),
 			as.integer(varid2use),	
@@ -1666,10 +1773,16 @@ ncvar_put <- function( nc, varid=NA, vals=NA, start=NA, count=NA, verbose=FALSE 
 			print(paste("C function R_nc4_put_var_int returned", rv$error))
 		}
 
-	else if( (precint == 3) || (precint == 4)) {
-		#----------------
-		# Float or double
-		#----------------
+	else if( (precint == 3) || (precint == 4) || (precint == 10) || (precint == 11)) {
+		#-----------------------------------------------
+		# Float, double, 8-byte int, unsigned 8-byte int
+		#-----------------------------------------------
+		if( (precint == 10) || (precint == 11)) {
+			print(paste(">>>> WARNING <<<< You are attempting to write data to a 8-byte integer,"))
+			print(paste("but R does not have an 8-byte integer type.  This is a bad idea! I will"))
+			print(paste("TRY to write this by converting from double precision floating point, but"))
+			print(paste("this could lose precision in your data!"))
+			}
 		rv <- .C("R_nc4_put_vara_double", 
 			as.integer(ncid2use),
 			as.integer(varid2use),	
@@ -1677,7 +1790,8 @@ ncvar_put <- function( nc, varid=NA, vals=NA, start=NA, count=NA, verbose=FALSE 
 			as.integer(c.count),	# Already switched to C convention...
 			data=as.double(vals),
 			error=as.integer(rv$error),
-			PACKAGE="ncdf4")
+			PACKAGE="ncdf4",
+			NAOK=TRUE )
 		if( rv$error != 0 ) 
 			stop("C function R_nc4_put_var_double returned error")
 		if( verbose )
@@ -1722,7 +1836,7 @@ ncvar_put <- function( nc, varid=NA, vals=NA, start=NA, count=NA, verbose=FALSE 
 # Argument 'signedbyte' can be TRUE for bytes to be interpreted as 
 # signed, or FALSE to be unsigned.
 #
-ncvar_get <- function( nc, varid=NA, start=NA, count=NA, verbose=FALSE, signedbyte=TRUE ) {
+ncvar_get <- function( nc, varid=NA, start=NA, count=NA, verbose=FALSE, signedbyte=TRUE, collapse_degen=TRUE ) {
 
 	if( class(nc) != "ncdf4" )
 		stop("first argument (nc) is not of class ncdf4!")
@@ -1837,20 +1951,31 @@ nc_enddef <- function( nc ) {
 #===============================================================
 nc_close <- function( nc ) {
 
-	if( is.numeric(nc))
-		ncid2use <- nc
-	else if( class(nc) == 'ncdf4' )
+	# Removed in version 1.5
+	#if( is.numeric(nc))
+	#	ncid2use <- nc
+
+	if( class(nc) == 'ncdf4' )
 		ncid2use <- nc$id
 	else
-		stop("First argument must be a simple integer ID or an object of class ncdf4, as returned by nc_open() or nc_create()")
+		stop("First argument must be an object of class ncdf4, as returned by nc_open() or nc_create()")
 
 	rv = .C("R_nc4_close", as.integer(ncid2use), PACKAGE="ncdf4")
+
+	#----------------------------------------------------------------------------
+	# Following is taken from a posting by Simon Fear <Simon.Fear@synequanon.com>
+	# to the R-help newslist on Thu, 19 Feb 2004 10:11:50 -0000
+	#----------------------------------------------------------------------------
+	eval(eval(substitute(expression(nc$id <<- -1))))  # set id of CALLING object to -1
 }
 
 #===========================================================================================
 # Inputs old_varname and new_varname are character strings.  If you are renaming a
 # var in a group, then they both must be fully qualified varnames with the same
 # number of forward slashes.
+# 
+# Useage:
+#	ncid <- ncvar_rename( ncid, 'oldname', 'newname' )
 #
 ncvar_rename <- function( nc, old_varname, new_varname, verbose=FALSE ) {
 

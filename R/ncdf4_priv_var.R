@@ -324,7 +324,7 @@ ncvar_inq <- function( ncid, varid ) {
 	rv$type    <- -1
 	rv$ndims   <- -1
 	rv$natts   <- -1
-	rv$precint <- -1 # INTEGER (not character) form of precision. 1=SHORT, 2=INT, 3=FLOAT, 4=DOUBLE, 5=CHAR 6=BYTE.  Must match C code values!!
+	rv$precint <- -1 # INTEGER (not character) form of precision. 1=SHORT, 2=INT, 3=FLOAT, 4=DOUBLE, 5=CHAR 6=BYTE, 7=UBYTE, 8=USHORT, 9=UINT, 10=INT64, 11=UINT64, 12=STRING.  Must match C code values defined in the top of file ncdf.c
 	rv$dimids  <- integer(ncvar_ndims( ncid, varid ))
 	rv <- .C("R_nc4_inq_var",
 		as.integer(ncid),
@@ -421,7 +421,8 @@ ncvar_size <- function( ncid, varid ) {
 #
 # Output: one of the
 # integer R type codes (1=short, 2=int, 3=float, 4=double,
-# 5=char, 6=byte).
+# 5=char, 6=byte, 7=ubyte, 8=ushort, 9=uint, 10=int64, 11=uint64, 12=string).
+# These are defined at the top of file ncdf.c
 #
 ncvar_type <- function( ncid, varid, output_string=FALSE ) {
 
@@ -448,7 +449,9 @@ ncvar_type <- function( ncid, varid, output_string=FALSE ) {
 
 #======================================================================
 # Internal use only.  Takes an integer precision type, converts it
-# to a string.
+# to a string.  Valus are defined at the top of file ncdf.c, and are
+# not the same as in any netcdf header, since I don't want my code
+# to depend on values in any netcdf library headers
 #
 ncvar_type_to_string = function( precint ) {
 
@@ -464,6 +467,18 @@ ncvar_type_to_string = function( precint ) {
 		prec <- "char"
 	else if( precint == 6 )
 		prec <- "byte"
+	else if( precint == 7 )
+		prec <- "unsigned byte"
+	else if( precint == 8 )
+		prec <- "unsigned short"
+	else if( precint == 9 )
+		prec <- "unsigned int"
+	else if( precint == 10 )
+		prec <- "8 byte int"
+	else if( precint == 11 )
+		prec <- "unsinged 8 byte int"
+	else if( precint == 12 )
+		prec <- "string"
 	else
 		stop(paste("Error, unrecognized type code of variable supplied:", precint ))
 
@@ -541,7 +556,7 @@ ncvar_id <- function( ncid, varname ) {
 # (or NA if the variable does not have such an attribute).  Any
 # read-in values that are equal to missval are set to NA.
 #
-ncvar_get_inner <- function( ncid, varid, missval, addOffset=0., scaleFact=1.0, start=NA, count=NA, verbose=FALSE, signedbyte=TRUE ) {
+ncvar_get_inner <- function( ncid, varid, missval, addOffset=0., scaleFact=1.0, start=NA, count=NA, verbose=FALSE, signedbyte=TRUE, collapse_degen=TRUE ) {
 
 	if( ! is.numeric(ncid))
 		stop("Error, first arg passed to ncvar_get_inner (ncid) must be a simple C-style integer that is passed directly to the C api")
@@ -552,6 +567,8 @@ ncvar_get_inner <- function( ncid, varid, missval, addOffset=0., scaleFact=1.0, 
 	if( verbose ) 
 		print(paste("ncvar_get_inner: entering with (C-STYLE INTEGER ONLY) ncid=", ncid, 
 			"varid=", varid ))
+
+	tmp_typename = c('short', 'int', 'float', 'double', 'char', 'byte' )
 
 	have_start = (length(start)>1) || ((length(start)==1) && (!is.na(start)))
 	have_count = (length(count)>1) || ((length(count)==1) && (!is.na(count)))
@@ -630,13 +647,13 @@ ncvar_get_inner <- function( ncid, varid, missval, addOffset=0., scaleFact=1.0, 
 	#---------------------------------
 	# Get the correct type of variable
 	#---------------------------------
-	precint <- ncvar_type( ncid, varid ) # 1=short, 2=int, 3=float, 4=double, 5=char, 6=byte
+	precint <- ncvar_type( ncid, varid ) # 1=short, 2=int, 3=float, 4=double, 5=char, 6=byte, 7=ubyte, 8=ushort, 9=uint, 10=int64, 11=uint64, 12=string
 	if( verbose )
-		print(paste("Getting var of type",precint," (1=short, 2=int, 3=float, 4=double, 5=char, 6=byte)"))
-	if( (precint == 1) || (precint == 2) || (precint == 6)) {
-		#--------------------
-		# Short, Int, or Byte
-		#--------------------
+		print(paste("Getting var of type",tmp_typename[precint]))
+	if( (precint == 1) || (precint == 2) || (precint == 6) || (precint == 7) || (precint == 8) || (precint == 9)) {
+		#--------------------------------------
+		# Short, Int, Byte, UByte, UShort, Uint
+		#--------------------------------------
 		rv$data  <- integer(totvarsize)
 		rv <- .C("R_nc4_get_vara_int", 
 			as.integer(ncid),
@@ -651,10 +668,10 @@ ncvar_get_inner <- function( ncid, varid, missval, addOffset=0., scaleFact=1.0, 
 		if( rv$error != 0 ) 
 			stop("C function R_nc4_get_var_int returned error")
 		}
-	else if( (precint == 3) || (precint == 4)) {
-		#----------------
-		# Float or double
-		#----------------
+	else if( (precint == 3) || (precint == 4) || (precint == 10) || (precint == 11)) {
+		#-----------------------------
+		# Float, double, int64, uint64
+		#-----------------------------
 		rv$data  <- double(totvarsize)
 		rv <- .C("R_nc4_get_vara_double", 
 			as.integer(ncid),
@@ -707,7 +724,7 @@ ncvar_get_inner <- function( ncid, varid, missval, addOffset=0., scaleFact=1.0, 
 		}
 	else
 		{
-		stop(paste("Trying to get variable of an unhandled type code: ",precint))
+		stop(paste("Trying to get variable of an unhandled type code: ",precint, "(", ncvar_type_to_string(precint), ")"))
 		}
 	if( verbose )
 		print(paste("ncvar_get: C call returned",rv$error))
@@ -716,21 +733,23 @@ ncvar_get_inner <- function( ncid, varid, missval, addOffset=0., scaleFact=1.0, 
 	# Set our dims...but collapse degenerate dimensions first
 	#--------------------------------------------------------
 	if( ndims > 0 ) {
-		count.nodegen <- vector()
-		foundone <- 0
-		for( i in 1:ndims )
-			if( count[i] > 1 ) {
-				count.nodegen <- append(count.nodegen, count[i])
-				foundone <- 1
+		if( collapse_degen ) {
+			count.nodegen <- vector()
+			foundone <- 0
+			for( i in 1:ndims )
+				if( count[i] > 1 ) {
+					count.nodegen <- append(count.nodegen, count[i])
+					foundone <- 1
+					}
+			if( foundone == 0 ) 
+				dim(rv$data) <- (1)
+			else
+				{
+				if( verbose )
+					print(paste("count.nodegen:",count.nodegen,"   Length of data:",length(rv$data)))
+				if( precint != 5 )
+					dim(rv$data) <- count.nodegen
 				}
-		if( foundone == 0 ) 
-			dim(rv$data) <- (1)
-		else
-			{
-			if( verbose )
-				print(paste("count.nodegen:",count.nodegen,"   Length of data:",length(rv$data)))
-			if( precint != 5 )
-				dim(rv$data) <- count.nodegen
 			}
 		if( verbose ) {
 			print("ncvar_get: final dims of returned array:")
@@ -741,28 +760,26 @@ ncvar_get_inner <- function( ncid, varid, missval, addOffset=0., scaleFact=1.0, 
 	#----------------------------------------------------------
 	# Change missing values to "NA"s.  Note that 'varid2Rindex'
 	# is NOT filled out for dimvars, so skip this if a dimvar
+	# 1=short, 2=int, 3=float, 4=double, 5=char, 6=byte
 	#----------------------------------------------------------
 	if( precint != 5 ) {
-		if( verbose ) 
-			print("ncvar_get: setting missing values to NA")
-		if( (precint==1) || (precint==2)) {
-			#---------------------
-			# Short, Int, and Byte
-			#---------------------
-			if( ! is.na(missval) ) {
-				if( verbose )
-					print(paste("missval:",missval))
+		if( verbose ) print("ncvar_get: setting missing values to NA")
+		if( (precint==1) || (precint==2) || (precint==6) || (precint==7) || (precint==8) || (precint==9)) {
+			#--------------------------------------
+			# Short, Int, Byte, UByte, UShort, UInt
+			#--------------------------------------
+			if( verbose ) print(paste("ncvar_get_inner: setting ", tmp_typename[precint],"-type missing value of ", missval, " to NA", sep=''))
+			if( ! is.na(missval) ) 
 				rv$data[rv$data==missval] <- NA
-				}
 			}
-		else if( (precint==3) || (precint==4)) {
-			#-----------------
-			# Float and Double
-			#-----------------
+		else if( (precint==3) || (precint==4) || (precint==10) || (precint==11)) {
+			#-----------------------------------------------
+			# Float, Double, 8-byte int, unsigned 8-byte int
+			#-----------------------------------------------
 			if( ! is.na(missval) ) {
 				tol <- abs(missval*1.e-5)
-				if( verbose )
-					print(paste("missval:",missval,"  tol:",tol))
+				if( verbose ) print(paste("ncvar_get_inner: setting ", tmp_typename[precint],"-type missing value of ", missval, 
+					" (w/tolerance ", tol,") to NA", sep=''))
 				rv$data[abs(rv$data-missval)<tol] <- NA
 				}
 			}

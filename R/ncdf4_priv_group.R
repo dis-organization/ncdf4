@@ -205,9 +205,9 @@ nc_groups_below <- function( root_group, format ) {
 # is encountered on the list, it is guaranteed that all of that
 # group's ancestors will already have been encountered on the list.
 #
-nc_parse_group_structure <- function( vars ) {
+nc_parse_group_structure <- function( vars, verbose=FALSE ) {
 
-	debug <- FALSE
+	debug <- verbose
 	if( debug ) print('nc_parse_group_structure: entering')
 
 	group <- list()

@@ -73,6 +73,8 @@ ncatt_get_n <- function( nc, varid ) {
 #
 ncatt_put_inner = function( ncid, varid, attname, attval, prec=NA, verbose=FALSE, definemode=FALSE ) {
 
+	if( verbose ) print(paste('ncatt_put_inner: entering with ncid=', ncid, 'varid=', varid, 'attname=', attname, 'attval=', attval, 'prec=', prec, 'storage.mode(attval)=', storage.mode(attval) ))
+
 	if( ! is.numeric(ncid))
 		stop("Can only be called with a simple C-style (0-based counting) integer ncid")
 
@@ -84,13 +86,15 @@ ncatt_put_inner = function( ncid, varid, attname, attval, prec=NA, verbose=FALSE
 		return()
 		}
 
-	#----------------------------------------------------------
+	#-------------------------------------------------------------
 	# Note there are TWO types here.  One is the storage mode
 	# of the passed attval.  The netCDF routine to call is based
 	# on this stoarge mode. The second type is the type of 
-	# attribute to create.  This is passed as a parameter to
-	# the netcDF routine.
-	#----------------------------------------------------------
+	# attribute to create.  This is passed as the 'prec' parameter 
+	# to this netcDF routine.  If the passed prec is NA, then
+	# the storage mode of the attval is used as the type of the
+	# attribute to create.
+	#-------------------------------------------------------------
 
 	#---------------------------------------------------------
 	# Get the netCDF function to call ... this always depends
@@ -102,9 +106,12 @@ ncatt_put_inner = function( ncid, varid, attname, attval, prec=NA, verbose=FALSE
 		funcname <- "R_nc4_put_att_double"
 	else if( storage.mode(attval) == "character")
 		funcname <- "R_nc4_put_att_text"
+	else if( storage.mode(attval) == "logical")
+		funcname <- "R_nc4_put_att_logical"
 	else
 		stop(paste("ncatt_put: error, passed an attribute with a storage mode not handled.  Att name:",attname,"Att value:",attval,"Storage mode passed:",storage.mode(attval),".  Handled types: integer double character"))
-	if( verbose ) print(paste("using function",funcname))
+
+	if( verbose ) print(paste("ncatt_put_inner: using function",funcname))
 
 	#-------------------------------------------------------------
 	# Get the type of attribute to create.  This follows the var's
@@ -118,22 +125,50 @@ ncatt_put_inner = function( ncid, varid, attname, attval, prec=NA, verbose=FALSE
 	atttypeByte  <- 6
 	typetocreate <- -1
 	if( (length(prec)==1) && is.na(prec) ) {
+		if( verbose ) print(paste("ncatt_put_inner: no user-specified att type was given, figuring it out..."))
+
+		#---------------------------------------------------------------------------
+		# The logic of this code is as follows. In general, given no additional
+		# information, it would be nice for the attribute to be the same type as
+		# the original variable IF POSSIBLE.  Now, if we are given a global 
+		# attribute, there is no "original variable", so we just take the precision
+		# (type) of the attribute as it is. If there IS a variable, we would like
+		# to make the att the same type if they are "compatible" types. For example,
+		# if the var is an int and the passed att is 52.0, it would be nice to 
+		# store it as an int rather than as a float. This code attempts to 
+		# make that decision.  In general, this only applies if we are trying to
+		# cast near-integer floats or doubles to int in the case of an int var.
+		#---------------------------------------------------------------------------
 		if( varid == -1 ) 	# A global attribute
 			prec <- storage.mode(attval)
 
 		else if( storage.mode(attval) == "character" ) {
-			prec <- "character"
+			prec <- "character"	# This always works, but MAY be inconvenient. However the user passed a char, so honor that request!
 			}
 
 		else
 			{
-			precint = ncvar_type( ncid, varid )
-			prec    = ncvar_type_to_string( precint )
-			}
-		}
+			prec = storage.mode(attval)	# our default choice
 
-	if( verbose ) print(paste("prec to ccreate:",prec))
-	if( prec == "float")
+			#----------------------------------------------------------------
+			# Get the prec (type) of the VARIABLE this att is associated with
+			#----------------------------------------------------------------
+			var_precint = ncvar_type( ncid, varid )
+			var_prec    = ncvar_type_to_string( var_precint )
+
+			if( var_prec == "int" ) {
+				att_is_int = (is.numeric(attval) && (floor(attval) == attval))
+				if( att_is_int ) 
+					prec = 'int'
+				}
+			}
+		if( verbose ) print(paste("ncatt_put_inner: using deduced attribute prec of", prec))
+		}
+	else
+		if( verbose ) print(paste("ncatt_put_inner: using specified attribute prec of", prec))
+
+	if( verbose ) print(paste("ncatt_put_inner: prec to create:",prec))
+	if( (prec == "single") || (prec == "float"))
 		typetocreate <- atttypeFloat
 	else if( prec == "short" )
 		typetocreate <- atttypeShort
@@ -161,7 +196,8 @@ ncatt_put_inner = function( ncid, varid, attname, attval, prec=NA, verbose=FALSE
 		as.integer(length(attval)),
 		attval,
 		error=as.integer(rv$error),
-		PACKAGE="ncdf4")
+		PACKAGE="ncdf4",
+		NAOK=TRUE )
 	if( rv$error != 0 ) {
 		print(paste("Error in ncatt_put, while writing attribute",
 			attname,"with value",attval))
@@ -251,7 +287,7 @@ ncatt_get_inner <- function( ncid, varid, attname=NA, verbose=FALSE ) {
 		as.integer(ncid),
 		as.integer(varid),
 		as.character(attname),
-		type=as.integer(rv0$type), # 1=short 2=int 3=float 4=double 5=text  6=byte
+		type=as.integer(rv0$type), # 1=short 2=int 3=float 4=double 5=text 6=byte 7=ubyte 8=ushort 9=uint 10=int64 11=uint64 12=string
 		attlen=as.integer(rv0$attlen),
 		error=as.integer(rv0$error),
 		PACKAGE="ncdf4")
@@ -270,10 +306,10 @@ ncatt_get_inner <- function( ncid, varid, attname=NA, verbose=FALSE ) {
 	rv <- list()
 	rv$error     <- -1
 
-	if( (rv0$type == 1) || (rv0$type == 2) || (rv0$type == 6)) {
-		#--------------------
-		# Short, Int, or Byte
-		#--------------------
+	if( (rv0$type == 1) || (rv0$type == 2) || (rv0$type == 6) || (rv0$type == 7) || (rv0$type == 8) || (rv0$type == 9)) {
+		#--------------------------------------
+		# Short, Int, Byte, UByte, UShort, UInt 
+		#--------------------------------------
 		rv$attribute <- rep(as.integer(0),rv0$attlen)
 		rv <- .C("R_nc4_get_att_int",
 			as.integer(ncid),
@@ -283,10 +319,15 @@ ncatt_get_inner <- function( ncid, varid, attname=NA, verbose=FALSE ) {
 			error=as.integer(rv$error),
 			PACKAGE="ncdf4")
 		}
-	else if( (rv0$type == 3) || (rv0$type == 4)) {
-		#-----------------
-		# Single or Double
-		#-----------------
+	else if( (rv0$type == 3) || (rv0$type == 4) || (rv0$type == 10) || (rv0$type == 11)) {
+		if( (rv0$type == 10) || (rv0$type == 11)) {
+			print(paste(">>>> WARNING <<<  attribute", attname, "is an 8-byte value, but R"))
+			print(paste("does not support this data type. I am returning a double precision"))
+			print(paste("floating point, but you must be aware that this could lose precision!"))
+			}
+		#------------------------------------------------
+		# Single, Double, 8-byte int, unsigned 8-byte int
+		#------------------------------------------------
 		rv$attribute <- rep(0.0,rv0$attlen)
 		rv <- .C("R_nc4_get_att_double",
 			as.integer(ncid),

@@ -620,6 +620,7 @@ NETCDF_LDFLAGS
 NETCDF_LIBS
 NETCDF_VERSION
 NETCDF_CC
+NETCDF_RPATH
 HAVE_NETCDF
 LIBOBJS
 LTLIBOBJS'
@@ -1693,7 +1694,7 @@ if test x$HAS_NC_CONFIG = xno; then
 	echo "the nc-config script by passing the --with-nc-config=/full/path/nc-config argument"
 	echo "flag to the configure script.  For example:"
 	echo " "
-	echo "./configure --with-nc-config=/sw/dist/netcdf4/nc-config"
+	echo "./configure --with-nc-config=/sw/dist/netcdf4/bin/nc-config"
 	echo " "
 	echo "Special note for R users:"
 	echo "-------------------------"
@@ -1706,10 +1707,23 @@ if test x$HAS_NC_CONFIG = xno; then
 	echo "-----------------------------------------------------------------------------------"
 	exit -1
 fi
+echo "Using nc-config: $NC_CONFIG_FULLQUAL"
+echo "Output of nc-config --all:"
+$NC_CONFIG_FULLQUAL --all
+echo "---"
 NETCDF_CC=`$NC_CONFIG_FULLQUAL --cc`
 NETCDF_LDFLAGS=`$NC_CONFIG_FULLQUAL --libs`
 NETCDF_CPPFLAGS=`$NC_CONFIG_FULLQUAL --cflags`
 NETCDF_VERSION=`$NC_CONFIG_FULLQUAL --version`
+NETCDF_RPATH=' '
+echo "netcdf.m4: about to set rpath, here is source string: >$NETCDF_LDFLAGS<"
+for word in $NETCDF_LDFLAGS; do
+	if test `expr $word : -L/` -eq 3; then
+		slibdir=`expr substr $word 3 9999`
+		NETCDF_RPATH="$NETCDF_RPATH -Wl,-rpath,$slibdir"
+	fi
+done
+echo "netcdf.m4: final rpath: $NETCDF_RPATH"
 NETCDF_V4=`$NC_CONFIG_FULLQUAL --has-nc4`
 
 cat >>confdefs.h <<\_ACEOF
@@ -1732,6 +1746,7 @@ echo "Netcdf library was compiled with C compiler: $NETCDF_CC"
 
 
 
+
 if test $NETCDF_V4 = "no"; then
 	echo "-------------------------------------------------------------------"
 	echo "ncdf4 REQUIRES the netcdf library be version 4 or above,"
@@ -1744,6 +1759,9 @@ if test $NETCDF_V4 = "no"; then
 fi
 
 HAVE_NETCDF=TRUE
+
+NETCDF_LDFLAGS="$NETCDF_RPATH $NETCDF_LDFLAGS"
+
 
 
 
@@ -2423,12 +2441,13 @@ NETCDF_LDFLAGS!$NETCDF_LDFLAGS$ac_delim
 NETCDF_LIBS!$NETCDF_LIBS$ac_delim
 NETCDF_VERSION!$NETCDF_VERSION$ac_delim
 NETCDF_CC!$NETCDF_CC$ac_delim
+NETCDF_RPATH!$NETCDF_RPATH$ac_delim
 HAVE_NETCDF!$HAVE_NETCDF$ac_delim
 LIBOBJS!$LIBOBJS$ac_delim
 LTLIBOBJS!$LTLIBOBJS$ac_delim
 _ACEOF
 
-  if test `sed -n "s/.*$ac_delim\$/X/p" conf$$subs.sed | grep -c X` = 46; then
+  if test `sed -n "s/.*$ac_delim\$/X/p" conf$$subs.sed | grep -c X` = 47; then
     break
   elif $ac_last_try; then
     { { echo "$as_me:$LINENO: error: could not make $CONFIG_STATUS" >&5
@@ -2759,8 +2778,9 @@ fi
 echo " "
 echo "**********************  Results of ncdf4 package configure *******************"
 echo " "
-echo "netCDF v4 CPP flags = $NETCDF_CPPFLAGS"
-echo "netCDF v4 LD flags  = $NETCDF_LDFLAGS"
+echo "netCDF v4 CPP flags 	= $NETCDF_CPPFLAGS"
+echo "netCDF v4 LD flags  	= $NETCDF_LDFLAGS"
+echo "netCDF v4 runtime path 	= $NETCDF_RPATH"
 echo " "
 echo "******************************************************************************"
 echo " "

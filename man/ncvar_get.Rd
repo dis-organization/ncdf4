@@ -6,7 +6,7 @@
 }
 \usage{
  ncvar_get(nc, varid=NA, start=NA, count=NA, verbose=FALSE,
- signedbyte=TRUE)
+ signedbyte=TRUE, collapse_degen=TRUE)
 }
 \arguments{
  \item{nc}{An object of class \code{ncdf4} (as returned by either 
@@ -40,6 +40,8 @@
  \item{signedbyte}{If TRUE (default), then on-disk byte variables are interpreted
  as signed.  This is in accord with the netCDF standard.  If FALSE, then
  on-disk byte variables are interpreted as unsigned.}
+ \item{collapse_degen}{If TRUE (the default), then degenerate (length==1) dimensions
+ in the returned array are removed.}
 }
 \references{
  http://dwpierce.com/software
@@ -66,6 +68,9 @@
  where the writing starts along each dimension, and the count of values
  along each dimension to write.  Note that the special count value "-1"
  means "all the values along that dimension".
+
+ If the variable in the netCDF file has a scale and/or offset attribute defined, 
+ the returned data are automatically and silently scaled and/or offset as requested.
 }
 \author{David W. Pierce \email{dpierce@ucsd.edu}}
 \seealso{ 
