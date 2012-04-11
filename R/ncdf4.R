@@ -124,7 +124,7 @@
 #======================================================================================================
 nc_version <- function() {
 	
-	return("ncdf4_1.6_20120409")
+	return("ncdf4_1.6.1_20120411")
 
 }
 
@@ -1966,7 +1966,7 @@ nc_close <- function( nc ) {
 	# Following is taken from a posting by Simon Fear <Simon.Fear@synequanon.com>
 	# to the R-help newslist on Thu, 19 Feb 2004 10:11:50 -0000
 	#----------------------------------------------------------------------------
-	eval(eval(substitute(expression(nc$id <<- -1))))  # set id of CALLING object to -1
+	#eval(eval(substitute(expression(nc$id <<- -1))))  # set id of CALLING object to -1
 }
 
 #===========================================================================================
