@@ -206,7 +206,7 @@ void R_ncu4_calc_start_count( int ncid, int varid, int *start_arg, int len_start
 
 
 /***************************************************************************************
- * Given a characer varid, this reads the data from the file.
+ * Given a characer variable name, this reads the data for that var from the file.
  * Return value: a list with two elements:
  *	[[1]]: an integer error code. '0' means no error.
  *	[[2]]: a real or integer array that contains the desired data.
@@ -487,3 +487,87 @@ SEXP R_ncu4_getListElement(SEXP list, char *str)
 Rprintf( "warning, no match found for element %s\n", str );
 	return elmt;
 }
+
+/*********************************************************************************
+ * Read vlen strings given the numeric varid, start, and count to use
+ */
+SEXP R_nc4_get_vara_string( SEXP sx_nc, SEXP sx_varid, SEXP sx_start, SEXP sx_count ) 
+{
+	SEXP	sx_retval, sx_retnames, sx_retstrings, sx_reterror;
+	int	i, ierr, nchar, varid, ncid, ndims, count_int[MAX_NC_DIMS], start_int[MAX_NC_DIMS], len_count, len_start; 
+	size_t	count[MAX_NC_DIMS], start[MAX_NC_DIMS], tot_count, isz;
+	char 	**ss;
+
+	/* Convert passed parameters (which are in R format) into C format */
+	ncid  = INTEGER(sx_nc   )[0];
+	varid = INTEGER(sx_varid)[0];
+
+	len_start = length(sx_start);
+	for( i=0; i<len_start; i++ ) {
+		start_int[i] = INTEGER(sx_start)[i];
+		start    [i] = (size_t)(start_int[i]);
+		}
+
+	len_count = length(sx_count);
+	for( i=0; i<len_count; i++ ) {
+		count_int[i] = INTEGER(sx_count)[i];
+		count    [i] = (size_t)(count_int[i]);
+		}
+
+	PROTECT( sx_retval   = allocVector( VECSXP, 2 ));       /* 2 elements in the returned list: $error, $strings */
+
+	/* Set the names for the returned list */
+	PROTECT( sx_retnames = allocVector( STRSXP, 2 ));       /* 2 elements in the returned list */
+	SET_STRING_ELT( sx_retnames, 0, mkChar("error") );
+	SET_STRING_ELT( sx_retnames, 1, mkChar("data") );
+	setAttrib( sx_retval, R_NamesSymbol, sx_retnames );
+	UNPROTECT(1); 
+
+	/* Set the return error code */
+	PROTECT( sx_reterror = allocVector( INTSXP, 1 ));
+	INTEGER( sx_reterror)[0] = 0;
+
+	/* Get number of dims in the var */
+	ierr = nc_inq_varndims( ncid, varid, &ndims );
+
+	/*--------------------------------------------------------------
+	 * At this point we have all the C values we need:
+	 *  	ncid
+	 *	varid (numeric)
+	 *	ndims
+	 *	start
+	 *	count
+	 *---------------------------------------------------------------*/
+	tot_count = 1L;
+	for( i=0; i<ndims; i++ ) 
+	 	tot_count *= count[i];
+
+	ss = (char **)malloc( sizeof( char *) * tot_count );
+	if( ss == NULL ) {
+		INTEGER( sx_reterror)[0] = -1;
+		error("ncdf4 library: routine R_nc4_get_vara_string: Error trying to allocate space to read the vlen strings: total count of strings requested: %ld\n", tot_count );
+		}
+
+	if( (ierr = nc_get_vara_string( ncid, varid, start, count, ss )) != 0 ) {
+		INTEGER( sx_reterror)[0] = -2;
+		error("ncdf4 library: routine R_nc4_get_vara_string: Error reading vlen strings: %s\n",
+			nc_strerror(ierr));
+		}
+
+	PROTECT( sx_retstrings = allocVector( STRSXP, tot_count ));
+	for( isz=0L; isz<tot_count; isz++ ) {
+		nchar = strlen( ss[isz] );
+		SET_STRING_ELT( sx_retstrings, isz, mkChar(ss[isz]) );
+		}
+
+	SET_VECTOR_ELT( sx_retval, 0, sx_reterror   );
+	SET_VECTOR_ELT( sx_retval, 1, sx_retstrings );
+
+	UNPROTECT(3);	
+
+	/* Free netcdf string storage */
+	nc_free_string( tot_count, ss );
+
+	return( sx_retval );
+}
+

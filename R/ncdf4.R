@@ -71,6 +71,7 @@
 #	dim	: a list of ncdim objects
 #	var	: a list of ncvar objects
 #	writable: TRUE or FALSE
+#	is_GMT	: TRUE if is a "GMT-style" netcdf file, FALSE otherwise
 #
 # class: ncdim4 (returned by ncdim_def, which creates a NEW 
 #		netCDF dimension in memory, and part of the list of dims
@@ -124,7 +125,7 @@
 #======================================================================================================
 nc_version <- function() {
 	
-	return("ncdf4_1.6.1_20120411")
+	return("ncdf4_1.10_20130806")
 
 }
 
@@ -237,63 +238,66 @@ print.ncdf4 <- function( x, ... ) {
 	nc <- x
 
 	is_netcdf_v4 = (nc$format == 'NC_FORMAT_NETCDF4')
+	is_GMT       = ifelse( nc$is_GMT, ' (GMT format)', '' )
 
-	print(paste("File ",nc$filename, " (", nc$format, "):", sep=''))
+	print(paste("File ",nc$filename, " (", nc$format, ")", is_GMT, ":", sep=''))
 	print("")
-	print(paste("    ",nc$nvars,"variables:"))
-	for( i in 1:nc$nvars ) {
-		nd <- nc$var[[i]]$ndims
-		dimstring <- '['
-		if( nd > 0 ) {
-			for( j in 1:nd ) {
-				dimstring <- paste(dimstring,nc$var[[i]]$dim[[j]]$name,sep='')
-				if( j < nd )
-					dimstring <- paste(dimstring,',',sep='')
-				}
-			}
-		dimstring <- paste(dimstring,'] ',sep='')
-
-		chunk_tag = ''
-		compress_tag = ''
-		if( is_netcdf_v4 ) {
-
-			#----------------------------
-			# Handle chunking information
-			#----------------------------
-			if( is.null(nc$var[[i]]$storage) || nc$var[[i]]$storage == 1 )
-				chunk_tag = "  (Contiguous storage)"
-			else
-				{
-				chunk_tag = "  (Chunking: ["
+	print(paste("    ",nc$nvars,"variables (excluding dimension variables):"))
+	if( nc$nvars > 0 ) {
+		for( i in 1:nc$nvars ) {
+			nd <- nc$var[[i]]$ndims
+			dimstring <- '['
+			if( nd > 0 ) {
 				for( j in 1:nd ) {
-					chunk_tag = paste( chunk_tag, nc$var[[i]]$chunksizes[j], sep='' )
+					dimstring <- paste(dimstring,nc$var[[i]]$dim[[j]]$name,sep='')
 					if( j < nd )
-						chunk_tag = paste( chunk_tag, ",", sep='' )
+						dimstring <- paste(dimstring,',',sep='')
 					}
-				chunk_tag = paste( chunk_tag, "])", sep='' )
 				}
+			dimstring <- paste(dimstring,'] ',sep='')
 
-			#---------------------------------------
-			# Handle shuffle/compression information
-			#---------------------------------------
-			is_shuffle  = (nc$var[[i]]$shuffle == 1)
-			is_compress = (!is.na(nc$var[[i]]$compression))
-			if( (!is_shuffle) && (!is_compress))  
-				compress_tag = ""
-			else if( is_shuffle && (!is_compress))
-				compress_tag = "(Compression: shuffle)"
-			else if( (!is_shuffle) && is_compress )
-				compress_tag = paste("(Compression: level ", nc$var[[i]]$compression, ")", sep='' )
-			else
-				compress_tag = paste("(Compression: shuffle,level ", nc$var[[i]]$compression, ")", sep='' )
-			}
-		print(paste("        ", nc$var[[i]]$prec, ' ', nc$var[[i]]$name, dimstring, chunk_tag, "  ", compress_tag, sep='' ))
-		atts <- ncatt_get( nc, nc$var[[i]]$name )
-		natts <- length(atts)
-		if( natts > 0 ) {
-			nms <- names( atts )
-			for( ia in 1:natts ) 
-				print(paste("            ", nms[ia], ": ", atts[[ia]], sep='' ))
+			chunk_tag = ''
+			compress_tag = ''
+			if( is_netcdf_v4 ) {
+
+				#----------------------------
+				# Handle chunking information
+				#----------------------------
+				if( is.null(nc$var[[i]]$storage) || nc$var[[i]]$storage == 1 )
+					chunk_tag = "  (Contiguous storage)"
+				else
+					{
+					chunk_tag = "  (Chunking: ["
+					for( j in 1:nd ) {
+						chunk_tag = paste( chunk_tag, nc$var[[i]]$chunksizes[j], sep='' )
+						if( j < nd )
+							chunk_tag = paste( chunk_tag, ",", sep='' )
+						}
+					chunk_tag = paste( chunk_tag, "])", sep='' )
+					}
+
+				#---------------------------------------
+				# Handle shuffle/compression information
+				#---------------------------------------
+				is_shuffle  = (nc$var[[i]]$shuffle == 1)
+				is_compress = (!is.na(nc$var[[i]]$compression))
+				if( (!is_shuffle) && (!is_compress))  
+					compress_tag = ""
+				else if( is_shuffle && (!is_compress))
+					compress_tag = "(Compression: shuffle)"
+				else if( (!is_shuffle) && is_compress )
+					compress_tag = paste("(Compression: level ", nc$var[[i]]$compression, ")", sep='' )
+				else
+					compress_tag = paste("(Compression: shuffle,level ", nc$var[[i]]$compression, ")", sep='' )
+				}
+			print(paste("        ", nc$var[[i]]$prec, ' ', nc$var[[i]]$name, dimstring, chunk_tag, "  ", compress_tag, sep='' ))
+			atts <- ncatt_get( nc, nc$var[[i]]$name )
+			natts <- length(atts)
+			if( natts > 0 ) {
+				nms <- names( atts )
+				for( ia in 1:natts ) 
+					print(paste("            ", nms[ia], ": ", atts[[ia]], sep='' ))
+				}
 			}
 		}
 
@@ -500,15 +504,13 @@ ncvar_def <- function( name, units, dim, missval, longname=name, prec="float",
 # in the values yourself with a 'ncvar_get' call, instead of
 # accessing the ncid$dim[[DIMNAME]]$vals array.
 #
-nc_open <- function( filename, write=FALSE, readunlim=TRUE, verbose=FALSE ) {
+nc_open <- function( filename, write=FALSE, readunlim=TRUE, verbose=FALSE,
+		auto_GMT=TRUE, suppress_dimvals=FALSE ) {
 
-	if( verbose ) print(paste("nc_open: entering, package version", nc_version() ))
+	if( verbose ) print(paste("nc_open: entering, ncdf4 package version", nc_version() ))
 
 	if( (! is.character(filename)) || (nchar(filename) < 1))
 		stop("Passed a filename that is NOT a string of characters!")
-
-	if( verbose )
-		print(paste("nc_open: entering, ncdf version=",nc_version()))
 
 	rv <- list()
 
@@ -545,6 +547,44 @@ nc_open <- function( filename, write=FALSE, readunlim=TRUE, verbose=FALSE ) {
 	if( verbose )
 		print(paste("file", filename, "is format", nc$format ))
 
+	#------------------------------------------------------------------------
+	# See if this is a GMT-style netcdf file. Distinguishing characteristics:
+	#	* has a dimension named "xysize"
+	#	* has a dimension named "side" with val of 2
+	#	* Has a variable named dimension with dim of size
+	#	* Has a variable named spacing with dim of size
+	#	* Has a variable named z with dim of xysize
+	#------------------------------------------------------------------------
+	nc$is_GMT = FALSE
+	if( auto_GMT) {
+		dimlen_xysize   = ncdim_len( nc$id, 'xysize'    )
+		dimlen_side     = ncdim_len( nc$id, 'side'      )
+		varid_dimension = ncvar_id( nc$id, 'dimension' ) 
+		varid_spacing   = ncvar_id( nc$id, 'spacing'   ) 
+		varid_z         = ncvar_id( nc$id, 'z'         ) 
+		if( (dimlen_xysize   != -1 ) &&
+		    (dimlen_side     != -1 ) &&
+		    (varid_dimension != -1 ) &&
+		    (varid_spacing   != -1 ) &&
+		    (varid_z         != -1 )) {
+			#--------------------------------------
+			# Good so far ... see if sizes match up
+			#--------------------------------------
+			varsize_dimension = ncvar_size( nc$id, varid_dimension )
+			if( (length(varsize_dimension) == 1) && (varsize_dimension[1] == dimlen_side) ) {
+				varsize_spacing = ncvar_size( nc$id, varid_spacing )
+				if( (length(varsize_dimension) == 1) && (varsize_dimension[1] == dimlen_side) ) {
+					varsize_z = ncvar_size( nc$id, varid_z )
+					if( (length(varsize_z) == 1) && (varsize_z[1] == dimlen_xysize) ) {
+						#print('** nc_open: File automatically detected to be in GMT format (set auto_GMT=FALSE to disable) **')
+						nc$is_GMT = TRUE
+						# Note: functionality not used yet 
+						}
+					}
+				}
+			}
+		}
+
 	#-----------------------------------------------------
 	# Get all the groups in the file.  Later we have to 
 	# remember that dims and vars can live in groups other
@@ -559,13 +599,20 @@ nc_open <- function( filename, write=FALSE, readunlim=TRUE, verbose=FALSE ) {
 		}
 	nc$groups <- groups
 
+	#--------------------------------------------------------------------------------------
+	# Construct mapping between fully qualified group name and R index into the groups list
+	#--------------------------------------------------------------------------------------
+	nc$fqgn2Rindex 	<- list()		# given fqgn, gives R index into nc$group list
+	for( i in 1:length(groups)) 
+		nc$fqgn2Rindex[[ groups[[i]]$fqgn ]] = i
+
 	if( verbose ) {
 		print("Group info:")
 		for( ig in 1:length(groups)) {
 			print(paste("Group", ig, ": ",
 				"name=", groups[[ig]]$name,
 				"id=", groups[[ig]]$id,
-				"fqgn= \"", groups[[ig]]$fqgn, "\"",
+				'fqgn= "', groups[[ig]]$fqgn, '"',
 				"nvars=", groups[[ig]]$nvars,
 				"ndims=", groups[[ig]]$ndims,
 				"dimid=")) 
@@ -647,7 +694,8 @@ nc_open <- function( filename, write=FALSE, readunlim=TRUE, verbose=FALSE ) {
 				print(paste(".....dim name is",d$name,"  id=", d$id, "  len=",d$len,"     dimvarid=",d$dimvarid$id))
 
 			if( d$dimvarid$id == -1 ) {	# No dimvar for this dim
-				d$vals  <- 1:d$len
+				if( ! suppress_dimvals )
+					d$vals  <- 1:d$len
 				d$units <- ""
 				d$create_dimvar <- FALSE	# in case this dim is passed to nc_create()
 				}
@@ -668,11 +716,13 @@ nc_open <- function( filename, write=FALSE, readunlim=TRUE, verbose=FALSE ) {
 				#else
 				#       since nothing else is defined here, is.null(d$calendar) will return TRUE
 
-				if( d$unlim && (! readunlim)) # Is unlimited, don't read vals, too slow
-					d$vals <- rep(NA,d$len)
-				else			# Otherwise, read vals
-					d$vals <- ncvar_get_inner( d$dimvarid$group_id, d$dimvarid$id, default_missval_ncdf4(), 
-							verbose=verbose )
+				if( ! suppress_dimvals ) {
+					if( d$unlim && (! readunlim)) # Is unlimited, don't read vals, too slow
+						d$vals <- rep(NA,d$len)
+					else			# Otherwise, read vals
+						d$vals <- ncvar_get_inner( d$dimvarid$group_id, d$dimvarid$id, default_missval_ncdf4(), 
+								verbose=verbose )
+					}
 
 				d$create_dimvar <- TRUE		# in case this dim is passed to nc_create()
 				}
@@ -832,10 +882,12 @@ nc_open <- function( filename, write=FALSE, readunlim=TRUE, verbose=FALSE ) {
 				# a default value if it does not have one
 				#----------------------------------------
 				found_mv <- FALSE
+				v$make_missing_value <- FALSE
 				mv <- ncatt_get_inner( groups[[ig]]$id, ivar-1, "missing_value" )  # ivar-1 because ncvar_inq takes input in C standard, which starts at 0
 				if( mv$hasatt ) {
 					found_mv <- TRUE
 					v$missval <- mv$value
+					v$make_missing_value <- TRUE
 					}
 				else
 					{
@@ -843,6 +895,7 @@ nc_open <- function( filename, write=FALSE, readunlim=TRUE, verbose=FALSE ) {
 					if( mv$hasatt ) {
 						found_mv <- TRUE
 						v$missval <- mv$value
+						v$make_missing_value <- TRUE
 						}
 					}
 
@@ -898,6 +951,14 @@ nc_open <- function( filename, write=FALSE, readunlim=TRUE, verbose=FALSE ) {
 				} # end of "if NOT dimvar" clause
 			} # end of loop over vars in this group
 		} # end of loop over all groups
+
+	#---------------------------------------------------------------------------
+	# Handle GMT style files by manipulating them so that they seem like regular
+	# netcdf files
+	#---------------------------------------------------------------------------
+	if( (nc$nvars == 1) && nc$is_GMT ) {
+		# Not implmented yet 
+		}
 
 	attr(nc$var,"names") <- varnames
 
@@ -1215,6 +1276,19 @@ ncvar_add <- function( nc, v, verbose=FALSE, indefine=FALSE ) {
 		nc_redef( nc )	# Go back into define mode
 		}
 
+	#-----------------------------------------------------------------------
+	# If the variable lives in a group, then this must be a netcdf version 4
+	# file to work
+	#-----------------------------------------------------------------------
+	if( nslashes_ncdf4( v$name ) > 0 ) {
+		if ( ncdf4_format( nc$id ) != 'NC_FORMAT_NETCDF4' ) {
+			print(paste("Error, you specified adding a variable in a group to the netcdf file, but the file is NOT netcdf version 4 format -- this is impossible!"))
+			print(paste("Here is the name of the variable that is trying to be added:", v$name ))
+			print(paste("Here is the file that the variable is trying to be added to:", nc$filename ))
+			stop('Error')
+			}
+		}
+
 	#-----------------------------------------------------
 	# Create the dims for this var.  Harder than it sounds 
 	# because we must take care not to repeat making a dim 
@@ -1334,8 +1408,17 @@ ncvar_add <- function( nc, v, verbose=FALSE, indefine=FALSE ) {
 		{
 		vars_fqgn <- nc4_basename( v$name, dir=TRUE )	# this is the var's fully qualified GROUP name
 		gidx      <- nc$fqgn2Rindex[[ vars_fqgn ]]
-		if( is.null(gidx))
-			stop(paste("internal error: did not find fully qualified group name", vars_fqgn," in list of groups for file", nc$filename))
+		if( is.null(gidx)) {
+			print(paste('internal error: did not find fully qualified group name "', vars_fqgn, '" in list of groups for file', nc$filename, sep=''))
+			if( is.null( nc$fqgn2Rindex )) 
+				print('Reason: nc$fqgn2Rindex is empty (null)!')
+			else
+				{
+				print(paste('Here is the nc$fqgn2Rindex list:'))
+				print(nc$fqgn2Rindex)
+				}
+			stop('Error')
+			}
 		}
 	ncid2use <- nc$group[[gidx]]$id
 	name2use <- nc4_basename( v$name )
@@ -1477,30 +1560,39 @@ ncvar_add <- function( nc, v, verbose=FALSE, indefine=FALSE ) {
 #
 ncatt_get <- function( nc, varid, attname=NA, verbose=FALSE ) {
 
+	if( verbose ) print('ncatt_get: entering')
+
 	if( class(nc) != "ncdf4" ) 
 		stop("Error, first passed argument must be an object of class ncdf4")
 
 	#----------------------------------------------------------------------------
 	# Atts have a special case where an integer 0 means to access the global atts
 	#----------------------------------------------------------------------------
-	if( is.numeric(varid) && (varid == 0)) 
+	if( is.numeric(varid) && (varid == 0)) {
 		is_global = TRUE
+		if( verbose ) print('ncatt_get: is a global att')
+		}
 	else
 		{
 		if( (class(varid) != "ncvar4") && (!is.character(varid)))
 			stop(paste("second arg (varid) must be one of: 0, an object of class ncvar4, or the character string name of a variable"))
+		if( verbose ) print('ncatt_get: is NOT a global att')
 		is_global = FALSE
 		}
 
-	if( is_global ) 
+	if( is_global ) {
+		if( verbose ) print('ncatt_get: calling ncatt_get_inner for a global att')
 		return( ncatt_get_inner( nc$id, -1, attname=attname, verbose=verbose ))	# NOTE how we convert from varid=0 to varid=-1 here to match C API standard
+		}
 	else
 		{
 		if( (class(varid) != "ncvar4") && ( storage.mode(varid) != "character" )) 
 			stop("ncvar_change_missval: error, passed varid must be either 0 (for global attributes), the name of the variable to operate on, or an object of class ncvar4")
+		if( verbose ) print('ncatt_get: getting object id')
 		idobj <- vobjtovarid4( nc, varid, allowdimvar=TRUE, verbose=verbose )	# an object of class 'ncid4'
 		if( idobj$id == -1 )
 			return( list() )
+		if( verbose ) print('ncatt_get: calling ncatt_get_inner for a non-global att')
 		return( ncatt_get_inner( idobj$group_id, idobj$id, attname=attname, verbose=verbose ))
 		}
 }
@@ -1603,6 +1695,8 @@ ncatt_put <- function( nc, varid, attname, attval, prec=NA,
 #
 ncvar_put <- function( nc, varid=NA, vals=NULL, start=NA, count=NA, verbose=FALSE ) {
 
+	if( verbose ) print('ncvar_put: entering')
+
 	if( class(nc) != 'ncdf4' )
 		stop(paste("Error: first argument to ncvar_put must be an object of type ncdf,",
 			"as returned by a call to nc_open(...,write=TRUE) or nc_create"))
@@ -1668,17 +1762,23 @@ ncvar_put <- function( nc, varid=NA, vals=NULL, start=NA, count=NA, verbose=FALS
 
 	varsize <- ncvar_size ( ncid2use, varid2use )
 	ndims   <- ncvar_ndims( ncid2use, varid2use )
+	is_scalar = (varsize == 1) && (ndims == 0)
 	if( verbose ) {
 		print(paste("ncvar_put: varsize="))
 		print(varsize)
 		print(paste("ncvar_put: ndims=", ndims))
+		print(paste("ncvar_put: is_scalar=", is_scalar ))
 		}
 
 	#--------------------------------------------------------
 	# Fix up start and count to use (in R convention for now)
 	#--------------------------------------------------------
-	if( (length(start)==1) && is.na(start) )
-		start <- rep(1,ndims)	# Note: use R convention for now
+	if( (length(start)==1) && is.na(start) ) {
+		if( is_scalar )
+			start <- 1
+		else
+			start <- rep(1,ndims)	# Note: use R convention for now
+		}
 	else
 		{
 		if( length(start) != ndims ) 
@@ -1719,7 +1819,8 @@ ncvar_put <- function( nc, varid=NA, vals=NULL, start=NA, count=NA, verbose=FALS
 		mv <- default_missval_ncdf4()
 	else
 		mv <- nc$var[[ varidx2use ]]$missval 
-	vals <- ifelse( is.na(vals), mv, vals)
+	if( ! is.null(mv))
+		vals <- ifelse( is.na(vals), mv, vals)
 
 	#---------------------------------
 	# Get the correct type of variable
@@ -1818,6 +1919,8 @@ ncvar_put <- function( nc, varid=NA, vals=NULL, start=NA, count=NA, verbose=FALS
 
 	else
 		stop(paste("Internal error in ncvar_put: unhandled variable type=",precint,". Types I know: 1=short 2=int 3=float 4=double 5=char"))
+
+	if( verbose ) print('ncvar_put: exiting')
 }
 
 #===============================================================
@@ -1902,9 +2005,12 @@ ncvar_get <- function( nc, varid=NA, start=NA, count=NA, verbose=FALSE, signedby
 	else
 		scaleFact = 1.0;
 
-	return( ncvar_get_inner( idobj$group_id, idobj$id, nc$var[[li]]$missval,
+	rv = ncvar_get_inner( idobj$group_id, idobj$id, nc$var[[li]]$missval,
 			addOffset, scaleFact, start=start, count=count, 
-			verbose=verbose, signedbyte=signedbyte ))
+			verbose=verbose, signedbyte=signedbyte, 
+			collapse_degen=collapse_degen )
+
+	return( rv )
 }
 
 #====================================================================================================

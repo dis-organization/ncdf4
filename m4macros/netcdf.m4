@@ -86,7 +86,9 @@ echo "netcdf.m4: about to set rpath, here is source string: >$NETCDF_LDFLAGS<"
 for word in $NETCDF_LDFLAGS; do
 	if test `expr $word : -L/` -eq 3; then
 		slibdir=`expr substr $word 3 9999`
-		NETCDF_RPATH="$NETCDF_RPATH -Wl,-rpath,$slibdir"
+		if test -n "$slibdir"; then
+			NETCDF_RPATH="$NETCDF_RPATH -Wl,-rpath,$slibdir"
+		fi
 	fi
 done
 echo "netcdf.m4: final rpath: $NETCDF_RPATH"

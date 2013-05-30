@@ -222,6 +222,8 @@ ncatt_put_inner = function( ncid, varid, attname, attval, prec=NA, verbose=FALSE
 #
 ncatt_get_inner <- function( ncid, varid, attname=NA, verbose=FALSE ) {
 
+	if( verbose ) print(paste("ncatt_get_inner: entering with ncid=", ncid, "varid=", varid, "attname=", attname ))
+
 	if( ! is.numeric(ncid))
 		stop(paste("ncatt_get_inner must be passed a simple C-style (0-based counting) integer as the first argument (ncid)"))
 
@@ -283,6 +285,7 @@ ncatt_get_inner <- function( ncid, varid, attname=NA, verbose=FALSE ) {
 	rv0$error  <- -1
 	rv0$attlen <- -1
 	rv0$type   <- -1
+	if( verbose ) print("ncatt_get_inner: about to call R_nc4_inq_att")
 	rv0 <- .C("R_nc4_inq_att",
 		as.integer(ncid),
 		as.integer(varid),
@@ -291,6 +294,7 @@ ncatt_get_inner <- function( ncid, varid, attname=NA, verbose=FALSE ) {
 		attlen=as.integer(rv0$attlen),
 		error=as.integer(rv0$error),
 		PACKAGE="ncdf4")
+	if( verbose ) print(paste("ncatt_get_inner: R_nc4_inq_att returned with error=", rv0$error, "type=", rv0$type))
 	if( rv0$error != 0 ) {
 		#---------------------------------------------------------
 		# This variable did NOT have an attribute named 'attname',
@@ -311,6 +315,7 @@ ncatt_get_inner <- function( ncid, varid, attname=NA, verbose=FALSE ) {
 		# Short, Int, Byte, UByte, UShort, UInt 
 		#--------------------------------------
 		rv$attribute <- rep(as.integer(0),rv0$attlen)
+		if( verbose ) print(paste("ncatt_get_inner: calling R_nc4_get_att_int"))
 		rv <- .C("R_nc4_get_att_int",
 			as.integer(ncid),
 			as.integer(varid),
@@ -329,6 +334,7 @@ ncatt_get_inner <- function( ncid, varid, attname=NA, verbose=FALSE ) {
 		# Single, Double, 8-byte int, unsigned 8-byte int
 		#------------------------------------------------
 		rv$attribute <- rep(0.0,rv0$attlen)
+		if( verbose ) print(paste("ncatt_get_inner: calling R_nc4_get_att_double"))
 		rv <- .C("R_nc4_get_att_double",
 			as.integer(ncid),
 			as.integer(varid),
@@ -338,10 +344,11 @@ ncatt_get_inner <- function( ncid, varid, attname=NA, verbose=FALSE ) {
 			PACKAGE="ncdf4")
 		}
 	else if( rv0$type == 5 ) {
-		#-----------------------------------------------------------
-		# Character string ... note we allocate storage for it first
-		#-----------------------------------------------------------
+		#-------------------------------------------------
+		# "Text" ... note we allocate storage for it first
+		#-------------------------------------------------
 		rv$attribute <- blankstring_ncdf4( rv0$attlen )
+		if( verbose ) print(paste("ncatt_get_inner: calling R_nc4_get_att_text"))
 		rv <- .C("R_nc4_get_att_text",
 			as.integer(ncid),
 			as.integer(varid),
@@ -350,8 +357,27 @@ ncatt_get_inner <- function( ncid, varid, attname=NA, verbose=FALSE ) {
 			error=as.integer(rv$error),
 			PACKAGE="ncdf4")
 		}
+	else if( rv0$type == 12 ) {
+		#----------------------------------------------------
+		# "String" ... strings are very different from "text"
+		# because the reported "attlen" will be the number 
+		# of strings, rather than the length of any string.
+		#----------------------------------------------------
+		error = as.integer(0)
+		if( verbose ) print(paste("ncatt_get_inner: calling R_nc4_get_att_string"))
+		attribute <- .Call("R_nc4_get_att_string", 
+			as.integer(ncid),
+			as.integer(varid),
+			as.character(attname),
+			as.integer(rv0$attlen),		# number of strings to return
+			error,
+			PACKAGE="ncdf4")
+		rv = list( error=error, attribute=attribute )
+		}
 	else
-		stop("error, unhandled attribute type!")
+		stop(paste("error, unhandled attribute type:", rv0$type))
+
+	if( verbose ) print(paste("ncatt_get_inner: return value from that call:", rv$error))
 
 	if( rv$error != 0 ) {
 		#---------------------------------------------

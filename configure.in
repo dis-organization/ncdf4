@@ -1,4 +1,6 @@
-AC_INIT(R/load.R.in)
+AC_INIT(src/Makevars.in)
+
+echo "configure.in: starting"
 
 : ${R_HOME=`R RHOME`}
 if test -z "${R_HOME}"; then
@@ -30,8 +32,7 @@ AC_SUBST(NETCDF_LDFLAGS)
 AC_SUBST(NETCDF_RPATH)
 AC_SUBST(HAVE_NETCDF)
 
-AC_OUTPUT(R/load.R
-	src/Makevars)
+AC_OUTPUT(src/Makevars)
 
 echo " "
 echo "**********************  Results of ncdf4 package configure *******************"

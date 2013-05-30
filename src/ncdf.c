@@ -63,16 +63,18 @@ int R_nc4_nctype_to_Rtypecode( nc_type nct )
 }
 
 /*********************************************************************/
-/* Returns a vector of dim sizes for the variable */
-void R_nc4_varsize( int *ncid, int *varid, int *varsize, int *retval )
+/* Returns a vector of dim sizes for the variable.
+ * 'retval' is 0 for no error, or -1 for an error.
+ */
+void R_nc4_varsize( int *ncid, int *varid, int *ndims, int *varsize, int *retval )
 {
-	int 	i, err, ndims, dimid[NC_MAX_DIMS];
+	int 	i, err, dimid[NC_MAX_DIMS];
 	size_t	dimlen;
 
 	*retval = 0;
 
 	/* Get ndims */
-	err = nc_inq_varndims( *ncid, *varid, &ndims );
+	err = nc_inq_varndims( *ncid, *varid, ndims );
 	if( err != NC_NOERR ) {
 		Rprintf( "Error in R_nc4_varsize on nc_inq_varndims call: %s\n", 
 			nc_strerror(err) );
@@ -90,7 +92,7 @@ void R_nc4_varsize( int *ncid, int *varid, int *varsize, int *retval )
 		}
 
 	/* Get size of each dim */
-	for( i=0; i<ndims; i++ ) {
+	for( i=0; i<(*ndims); i++ ) {
 		err = nc_inq_dimlen( *ncid, dimid[i], &dimlen );
 		if( err != NC_NOERR ) {
 			Rprintf( "Error in R_nc4_varsize on nc_inq_dimlen call: %s\n",
@@ -232,6 +234,64 @@ void R_nc4_get_vara_double( int *ncid, int *varid, int *start,
 }
 
 /*********************************************************************/
+void R_nc4_get_vara_double_fixmiss( int *ncid, int *varid, int *start, 
+	int *count, int *imvstate, double *missval, double *data, int *retval )
+{
+	int	i, err, ndims;
+	size_t	s_start[MAX_NC_DIMS], s_count[MAX_NC_DIMS], tot_size, ii;
+	char	vn[2048];
+	double	mvtol;
+
+	err = nc_inq_varndims(*ncid, *varid, &ndims );
+	if( err != NC_NOERR ) 
+		Rprintf( "Error in R_nc4_get_vara_double while getting ndims: %s\n", 
+			nc_strerror(*retval) );
+
+	tot_size = 1L;
+	for( i=0; i<ndims; i++ ) {
+		s_start[i] = (size_t)start[i];
+		s_count[i] = (size_t)count[i];
+		tot_size   = tot_size * s_count[i];
+		}
+		
+	*retval = nc_get_vara_double(*ncid, *varid, s_start, s_count, data );
+	if( *retval != NC_NOERR ) {
+		nc_inq_varname( *ncid, *varid, vn );
+		Rprintf( "Error in R_nc4_get_vara_double: %s\n", 
+			nc_strerror(*retval) );
+		Rprintf( "Var: %s  Ndims: %d   Start: ", vn, ndims );
+		for( i=0; i<ndims; i++ ) {
+			Rprintf( "%u", (unsigned int)s_start[i] );
+			if( i < ndims-1 )
+				Rprintf( "," );
+			}
+		Rprintf( "Count: " );
+		for( i=0; i<ndims; i++ ) {
+			Rprintf( "%u", (unsigned int)s_count[i] );
+			if( i < ndims-1 )
+				Rprintf( "," );
+			}
+		}
+
+	/* We only do this for imvstate==2, which is a valid, non-NA
+	 * missing value. If the variable has NO missing value
+	 * (imvstate==0) or a NA missing value (imvstate==1) then
+	 * we skip this block.
+	 */
+	if( *imvstate == 2 ) {
+		if( *missval == 0.0 ) 
+			mvtol = 1.e-10;	/* arbitrary -- what are you supposed to use?? */
+		else
+			mvtol = fabs( *missval ) * 1.e-5;
+
+		for( ii=0L; ii<tot_size; ii++ ) {
+			if( fabs( data[ii] - *missval ) < mvtol )
+				data[ii] = NA_REAL;
+			}
+		}
+}
+
+/*********************************************************************/
 /* byte_style is 1 for signed, 2 for unsigned
  */
 void R_nc4_get_vara_int( int *ncid, int *varid, int *start, 
@@ -335,6 +395,24 @@ void R_nc4_get_vara_text( int *ncid, int *varid, int *start,
 		strncpy( data[i], tempstore[0]+i*slen, slen );
 		data[i][slen] = '\0';
 		}
+}
+
+/*********************************************************************/
+/* Returns -1 if the dim is not found in the file. Otherwise,
+ * returns the dimension's length
+ */
+void R_nc4_inq_dimlen( int *ncid, char **dimname, int *dimlen )
+{
+	int err, dimid;
+	err = nc_inq_dimid(*ncid, dimname[0], &dimid );
+	if( err != NC_NOERR ) {
+		*dimlen = -1;
+		return;
+		}
+
+	size_t st_dimlen;
+	err = nc_inq_dimlen( *ncid, dimid, &st_dimlen );
+	*dimlen = (int)st_dimlen;
 }
 
 /*********************************************************************/
@@ -699,6 +777,7 @@ void R_nc4_get_att_text( int *ncid, int *varid, char **attname,
 		attribute[0] );
 	/* append a NULL */
 	if( *retval != NC_NOERR ) {
+		Rprintf( "R_nc4_get_att_text: error encountered on call to nc_get_att_text: %s\n", nc_strerror(*retval) );
 		strcpy( attribute[0], "\0" );
 		return;
 		}
@@ -708,6 +787,71 @@ void R_nc4_get_att_text( int *ncid, int *varid, char **attname,
 		return;
 		}
 	attribute[0][attlen] = '\0';
+}
+
+/*********************************************************************/
+/* With strings, we explicitly allocate space for them here.
+ * Note that the string array is returned as the function return value; the
+ * error code is passed in and out as an argument.
+ */
+SEXP R_nc4_get_att_string( SEXP sx_ncid, SEXP sx_varid, SEXP sx_attname, SEXP sx_attlen, SEXP sx_ierr_returned )
+{
+	int	ncid, varid, attlen, ierr, i, slen;
+	char	**strings;
+	const char *attname = CHAR(STRING_ELT(sx_attname,0));
+	char	*tstr;
+	SEXP	sx_string, sx_ret_str_array;
+
+	INTEGER(sx_ierr_returned)[0] = 0;	/* initialize to "no error" */
+
+	ncid   = INTEGER(sx_ncid  )[0];
+	varid  = INTEGER(sx_varid )[0];
+	attlen = INTEGER(sx_attlen)[0];	/* for strings, this is the NUMBER of strings, not any string's length */
+
+	if( attlen < 1 ) {
+		Rf_error( "Error, in call to R_nc4_get_att_string, number of strings (attlen) must be >= 1\n" );
+		INTEGER(sx_ierr_returned)[0] = -1;
+		return( R_NilValue );
+		}
+
+	/* Make space in C to hold array of pointers to strings */
+	strings = (char **)R_alloc( attlen, sizeof(char *) );
+
+	/* Read the strings from the netcdf file. Note that the netcdf library
+	 * call allocates space for the strings themselves
+	 */
+	if( (ierr = nc_get_att_string( ncid, varid, attname, strings )) != NC_NOERR ) {
+		Rf_error( "Error, in call to R_nc4_get_att_string, failed to get the strings:\n" );
+		Rf_error( nc_strerror( ierr ) );
+		INTEGER(sx_ierr_returned)[0] = -1;
+		return( R_NilValue );
+		}
+
+	/* Initialize our return value
+	 */
+	sx_ret_str_array = PROTECT( NEW_CHARACTER( attlen ));	/* make array with "attlen" strings */
+
+	/* Copy from our C array to an R array that we make. We do this so 
+	 * that we can free the C netcdf-library allocated space, which
+	 * otherwise would never be freed
+	 */
+	for( i=0; i<attlen; i++ ) {
+		slen = strlen( strings[i] );
+		tstr = R_alloc( slen+1, sizeof(char) );
+		strncpy(tstr, strings[i], slen);
+		tstr[slen] = '\0';
+		sx_string = PROTECT( mkChar(tstr) );
+
+		SET_STRING_ELT( sx_ret_str_array, i, sx_string );
+		}
+
+	/* Free C memory allocated by netcdf library
+	 */
+	nc_free_string( attlen, strings );
+
+	UNPROTECT(attlen+1);
+
+	return( sx_ret_str_array );
 }
 
 /*********************************************************************/

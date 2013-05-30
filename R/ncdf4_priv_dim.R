@@ -49,7 +49,8 @@ ncdim_create <- function( nc, d, verbose=FALSE ) {
 		dims_fqgn <- nc4_basename( d$name, dir=TRUE )
 		gidx      <- nc$fqgn2Rindex[[ dims_fqgn ]]
 		if( is.null(gidx))
-			stop(paste("internal error: did not find dim's fully qualified group name", dims_fqgn," in list of groups for file", nc$filename))
+			stop(paste("internal error: did not find dim's fully qualified group name '", dims_fqgn,
+					"' in list of groups for file", nc$filename, sep=''))
 		}
 	ncid2use  <- nc$group[[gidx]]$id
 
@@ -264,5 +265,29 @@ ncdim_id <- function( nc, dimname ) {
 	if( rv$dimid != -1 )
 		rv$dimid <- rv$dimid 
 	return(rv$dimid)
+}
+
+#===============================================================
+# Internal use only
+#
+# Returns -1 if the dim is NOT found in the file or group, and the
+# length of the dim otherwise.
+#
+ncdim_len <- function( nc, dimname ) {
+
+	if( mode(nc) != 'numeric' )
+		stop("error, must be passed a numeric first arg: ncid2use")
+
+	if( mode(dimname) != 'character' )
+		stop("Error, must be passed a character second arg: dimname" )
+
+	rv        <- list()
+	rv$dimlen <- -1
+	rv <- .C("R_nc4_inq_dimlen", 
+		as.integer(nc),
+		as.character(dimname),
+		dimlen=as.integer(rv$dimlen),
+		PACKAGE="ncdf4")
+	return(rv$dimlen)
 }
 

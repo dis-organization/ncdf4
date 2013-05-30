@@ -20,7 +20,7 @@ nc_grpids <- function( root_id ) {
 		error=as.integer(rv$error),
 		PACKAGE="ncdf4")
 	if( rv$error != 0 ) 
-		stop(paste("Error in nc_grpids trying to get number of groups; C function R_nc4_inq_ngroups returned erro"))
+		stop(paste("Error in nc_grpids trying to get number of groups; C function R_nc4_inq_ngroups returned error"))
 
 	ngrps <- rv$ngrps
 	if( ngrps == 0 )

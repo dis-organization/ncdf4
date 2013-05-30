@@ -234,9 +234,11 @@ vobjtovarid4 <- function( nc, varid, verbose=FALSE, allowdimvar=TRUE) {
 	# See if any vars in this file have this name
 	#--------------------------------------------
 	varToUse <- -1
-	for( kk in 1:nc$nvars ) {
-		if( origvarid == nc$var[[kk]]$name ) 	# check to see if fully qualified name matches
-			varToUse <- kk
+	if( nc$nvars > 0 ) {
+		for( kk in 1:nc$nvars ) {
+			if( origvarid == nc$var[[kk]]$name ) 	# check to see if fully qualified name matches
+				varToUse <- kk
+			}
 		}
 
 	#---------------------------------
@@ -382,6 +384,9 @@ ncvar_inq <- function( ncid, varid ) {
 # The integers are raw C-style (0-based counting), with the ncid
 # actually being the group ID if necessary.
 #
+# A scalar variable (one with no dims) always returns a
+# varsize of 1.
+#
 ncvar_size <- function( ncid, varid ) {
 
 	if( mode(ncid) != 'numeric' ) 
@@ -392,14 +397,17 @@ ncvar_size <- function( ncid, varid ) {
 
 	ndims <- ncvar_ndims( ncid, varid )
 	if( ndims == 0 )
-		return(vector())
+		#return(vector())	changed DWP 2012-09-20
+		return(1)		# indicates a scalar var
 
 	rv         <- list()
 	rv$error   <- -1
 	rv$varsize <- integer(ndims)
+	rv$ndims   <- -1
 	rv <- .C("R_nc4_varsize",
 		as.integer(ncid),
 		as.integer(varid),
+		ndims=as.integer(rv$ndims),
 		varsize=as.integer(rv$varsize),
 		error=as.integer(rv$error),
 		PACKAGE="ncdf4")
@@ -650,6 +658,7 @@ ncvar_get_inner <- function( ncid, varid, missval, addOffset=0., scaleFact=1.0, 
 	precint <- ncvar_type( ncid, varid ) # 1=short, 2=int, 3=float, 4=double, 5=char, 6=byte, 7=ubyte, 8=ushort, 9=uint, 10=int64, 11=uint64, 12=string
 	if( verbose )
 		print(paste("Getting var of type",tmp_typename[precint]))
+
 	if( (precint == 1) || (precint == 2) || (precint == 6) || (precint == 7) || (precint == 8) || (precint == 9)) {
 		#--------------------------------------
 		# Short, Int, Byte, UByte, UShort, Uint
@@ -668,10 +677,47 @@ ncvar_get_inner <- function( ncid, varid, missval, addOffset=0., scaleFact=1.0, 
 		if( rv$error != 0 ) 
 			stop("C function R_nc4_get_var_int returned error")
 		}
-	else if( (precint == 3) || (precint == 4) || (precint == 10) || (precint == 11)) {
-		#-----------------------------
-		# Float, double, int64, uint64
-		#-----------------------------
+
+	else if( (precint == 3) || (precint == 4)) {
+		#----------------------------------------------------------------
+		# Float, double where we have the C routine fix the missing value
+		# 'imvstate' is: 0 if we do not have a missing value (it is NULL),
+		# 1 if the missing value is NA, 2 if the missing value is present
+		# and not NULL and not NA. These codes are used by the C routine
+		#----------------------------------------------------------------
+		if( is.null( missval )) {
+			passed_missval = 0.0
+			imvstate = as.integer(0)
+			}
+		else if( is.na(missval)) {
+			passed_missval = 0.0
+			imvstate = as.integer(1)
+			}
+		else
+			{
+			passed_missval = missval
+			imvstate = as.integer(2)
+			}
+		rv$data  <- double(totvarsize)
+		rv <- .C("R_nc4_get_vara_double_fixmiss", 
+			as.integer(ncid),
+			as.integer(varid),
+			as.integer(c.start),	# Already switched to C convention...
+			as.integer(c.count),	# Already switched to C convention...
+			as.integer(imvstate),
+			as.double(passed_missval),
+			data=as.double(rv$data),
+			error=as.integer(rv$error),
+			PACKAGE="ncdf4",
+			DUP=FALSE)
+		if( rv$error != 0 ) 
+			stop("C function R_nc4_get_vara_double returned error")
+		}
+
+	else if( (precint == 10) || (precint == 11)) {
+		#--------------
+		# int64, uint64
+		#--------------
 		rv$data  <- double(totvarsize)
 		rv <- .C("R_nc4_get_vara_double", 
 			as.integer(ncid),
@@ -685,7 +731,11 @@ ncvar_get_inner <- function( ncid, varid, missval, addOffset=0., scaleFact=1.0, 
 		if( rv$error != 0 ) 
 			stop("C function R_nc4_get_vara_double returned error")
 		}
+
 	else if( precint == 5 ) {
+		#-----
+		# Char 
+		#-----
 		strndims <- ndims - 1
 		strlen   <- count[1] + 1
 		strdim   <- 1
@@ -722,12 +772,27 @@ ncvar_get_inner <- function( ncid, varid, missval, addOffset=0., scaleFact=1.0, 
 
 		dim(rv$data) <- strdim
 		}
+
+	else if( precint == 12 ) {
+		#-----------------------------
+		# netcdf version 4 String type
+		#-----------------------------
+		rv <- .Call( "R_nc4_get_vara_string",
+			as.integer(ncid),
+			as.integer(varid),
+			as.integer(c.start),    # Already switched to C convention...
+			as.integer(c.count),    # Already switched to C convention...
+			PACKAGE="ncdf4" )
+		}
 	else
 		{
 		stop(paste("Trying to get variable of an unhandled type code: ",precint, "(", ncvar_type_to_string(precint), ")"))
 		}
-	if( verbose )
+	if( verbose ) {
 		print(paste("ncvar_get: C call returned",rv$error))
+		print(paste("ncvar_get: dim of directly returned array:"))
+		print(dim(rv$data))
+		}
 
 	#--------------------------------------------------------
 	# Set our dims...but collapse degenerate dimensions first
@@ -751,6 +816,9 @@ ncvar_get_inner <- function( ncid, varid, missval, addOffset=0., scaleFact=1.0, 
 					dim(rv$data) <- count.nodegen
 				}
 			}
+		else
+			dim(rv$data) = count
+
 		if( verbose ) {
 			print("ncvar_get: final dims of returned array:")
 			print(dim(rv$data))
@@ -761,8 +829,10 @@ ncvar_get_inner <- function( ncid, varid, missval, addOffset=0., scaleFact=1.0, 
 	# Change missing values to "NA"s.  Note that 'varid2Rindex'
 	# is NOT filled out for dimvars, so skip this if a dimvar
 	# 1=short, 2=int, 3=float, 4=double, 5=char, 6=byte
+	# NOTE: if type is 3 or 4 (float or double), the missing
+	# value was already set by the C routine.
 	#----------------------------------------------------------
-	if( precint != 5 ) {
+	if( (precint != 5) && (precint != 3) && (precint != 4) ) {	# not char, float, or double
 		if( verbose ) print("ncvar_get: setting missing values to NA")
 		if( (precint==1) || (precint==2) || (precint==6) || (precint==7) || (precint==8) || (precint==9)) {
 			#--------------------------------------
@@ -772,10 +842,10 @@ ncvar_get_inner <- function( ncid, varid, missval, addOffset=0., scaleFact=1.0, 
 			if( ! is.na(missval) ) 
 				rv$data[rv$data==missval] <- NA
 			}
-		else if( (precint==3) || (precint==4) || (precint==10) || (precint==11)) {
-			#-----------------------------------------------
-			# Float, Double, 8-byte int, unsigned 8-byte int
-			#-----------------------------------------------
+		else if( (precint==10) || (precint==11)) {
+			#--------------------------------
+			# 8-byte int, unsigned 8-byte int
+			#--------------------------------
 			if( ! is.na(missval) ) {
 				tol <- abs(missval*1.e-5)
 				if( verbose ) print(paste("ncvar_get_inner: setting ", tmp_typename[precint],"-type missing value of ", missval, 

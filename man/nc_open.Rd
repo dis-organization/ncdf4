@@ -5,7 +5,8 @@
  Opens an existing netCDF file for reading (or, optionally, writing).
 }
 \usage{
- nc_open( filename, write=FALSE, readunlim=TRUE, verbose=FALSE )
+ nc_open( filename, write=FALSE, readunlim=TRUE, verbose=FALSE, 
+ 	auto_GMT=TRUE, suppress_dimvals=FALSE )
 }
 \arguments{
  \item{filename}{Name of the existing netCDF file to be opened.}
@@ -15,6 +16,9 @@
  dimension.  If set to FALSE, the values for the unlimited dimension are not 
  automatically read in (they can be read in later, manually, using \code{ncvar_get()}).}
  \item{verbose}{If TRUE, then messages are printed out during execution of this function.}
+ \item{auto_GMT}{If TRUE, then GMT files are automatically detected. Does not yet do anything.}
+ \item{suppress_dimvals}{If TRUE, then NO dimensional values are automatically read in from the file. (Use
+ this if there are so many dimensional values that a out-of-memory error is generated).}
 }
 \value{
  An object of class \code{ncdf4} that has the fields described above.

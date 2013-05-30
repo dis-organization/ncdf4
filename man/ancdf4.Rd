@@ -1,9 +1,9 @@
 \name{ncdf4}
-\alias{ncdf4}
+\alias{ncdf4-package}
 \title{Read, write, and create netCDF files (including version 4 format)}
 \description{
  Read from or write to existing netCDF format files, or create new ones.
- This is the R-ncdf4 package, version 1.6.
+ This is the R-ncdf4 package, version 1.8.
 }
 \references{
  http://dwpierce.com/software
@@ -59,11 +59,10 @@
  to write your data to the newly created netCDF file, 
  and \code{\link[ncdf4]{nc_close}} when you are done.
 
- This is version 1.6 of the ncdf4 library. Not all features of netcdf-4 are
- supported yet.
- This version supports compression, chunking, groups, and multiple
+ Not all features of netcdf-4 are supported yet.
+ This version supports compression, chunking, groups, vlen strings, and multiple
  unlimited dimensions.
- User-defined types and "vlens" (variable-length arrays) are not supported yet.
+ User-defined types and vlen data arrays (variable-length arrays) are not supported yet.
 }
 \seealso{ 
  \code{\link[ncdf4]{print.ncdf4}},
