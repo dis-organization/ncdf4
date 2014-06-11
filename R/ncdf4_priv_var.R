@@ -553,6 +553,38 @@ ncvar_id <- function( ncid, varname ) {
 	return(rv$varid)
 }
 
+#===============================================================
+# Internal use only
+#
+# Inputs: ncid = integer
+#	  varname = character.   Can be a varname with slashes
+#		in it representing groups.
+#
+# Returns -1 if the var is NOT found in the file, and the
+# raw C-style integer varid of the var otherwise.
+#
+ncvar_id_hier <- function( ncid, varname ) {
+
+	if( mode(ncid) != 'numeric' )
+		stop("error, must be passed a numeric first arg: ncid2use")
+
+	if( mode(varname) != 'character' )
+		stop("Error, must be passed a character second arg: varname" )
+
+	rv         <- list()
+	rv$varid   <- -1
+	rv$groupid <- -1
+	rv <- .C("R_nc4_inq_varid_hier", 
+		as.integer(ncid),
+		as.character(varname),
+		groupid=as.integer(rv$groupid),
+		varid=as.integer(rv$varid),
+		PACKAGE="ncdf4")
+
+	retval = c( rv$varid, rv$groupid )
+	return( retval )
+}
+
 #===========================================================================================
 # This differs from the 'standard' (non-'inner') version by 
 # taking ONLY the raw, C-standard correct integers for ncid
@@ -657,25 +689,22 @@ ncvar_get_inner <- function( ncid, varid, missval, addOffset=0., scaleFact=1.0, 
 	#---------------------------------
 	precint <- ncvar_type( ncid, varid ) # 1=short, 2=int, 3=float, 4=double, 5=char, 6=byte, 7=ubyte, 8=ushort, 9=uint, 10=int64, 11=uint64, 12=string
 	if( verbose )
-		print(paste("Getting var of type",tmp_typename[precint]))
+		print(paste("ncvar_get_inner: getting var of type",tmp_typename[precint], 'id=', precint))
 
 	if( (precint == 1) || (precint == 2) || (precint == 6) || (precint == 7) || (precint == 8) || (precint == 9)) {
 		#--------------------------------------
 		# Short, Int, Byte, UByte, UShort, Uint
 		#--------------------------------------
-		rv$data  <- integer(totvarsize)
-		rv <- .C("R_nc4_get_vara_int", 
+		rv <- .Call("Rsx_nc4_get_vara_int", 
 			as.integer(ncid),
 			as.integer(varid),	
 			as.integer(c.start),	# Already switched to C convention...
 			as.integer(c.count),	# Already switched to C convention...
 			as.integer(byte_style), # 1=signed, 2=unsigned
-			data=as.integer(rv$data),
-			error=as.integer(rv$error),
-			PACKAGE="ncdf4",
-			DUP=FALSE)
+			PACKAGE="ncdf4")
 		if( rv$error != 0 ) 
-			stop("C function R_nc4_get_var_int returned error")
+			stop("C function Rsx_nc4_get_var_int returned error")
+		data = rv$data
 		}
 
 	else if( (precint == 3) || (precint == 4)) {
@@ -698,20 +727,19 @@ ncvar_get_inner <- function( ncid, varid, missval, addOffset=0., scaleFact=1.0, 
 			passed_missval = missval
 			imvstate = as.integer(2)
 			}
-		rv$data  <- double(totvarsize)
-		rv <- .C("R_nc4_get_vara_double_fixmiss", 
+		fixmiss = as.integer(1)
+		rv <- .Call("Rsx_nc4_get_vara_double", 
 			as.integer(ncid),
 			as.integer(varid),
 			as.integer(c.start),	# Already switched to C convention...
 			as.integer(c.count),	# Already switched to C convention...
-			as.integer(imvstate),
+			fixmiss,
+			imvstate,
 			as.double(passed_missval),
-			data=as.double(rv$data),
-			error=as.integer(rv$error),
-			PACKAGE="ncdf4",
-			DUP=FALSE)
+			PACKAGE="ncdf4")
 		if( rv$error != 0 ) 
 			stop("C function R_nc4_get_vara_double returned error")
+		data = rv$data
 		}
 
 	else if( (precint == 10) || (precint == 11)) {
@@ -719,17 +747,19 @@ ncvar_get_inner <- function( ncid, varid, missval, addOffset=0., scaleFact=1.0, 
 		# int64, uint64
 		#--------------
 		rv$data  <- double(totvarsize)
-		rv <- .C("R_nc4_get_vara_double", 
+		fixmiss = as.integer(0)
+		rv <- .Call("Rsx_nc4_get_vara_double", 
 			as.integer(ncid),
 			as.integer(varid),
 			as.integer(c.start),	# Already switched to C convention...
 			as.integer(c.count),	# Already switched to C convention...
-			data=as.double(rv$data),
-			error=as.integer(rv$error),
-			PACKAGE="ncdf4",
-			DUP=FALSE)
+			fixmiss,
+			as.integer(-1),		# The 'imvstate' arg is unused in this call since no fixmiss
+			as.double(0.0),		# the passed missing value is not used in this call since no fixmiss
+			PACKAGE="ncdf4")
 		if( rv$error != 0 ) 
 			stop("C function R_nc4_get_vara_double returned error")
+		data = rv$data
 		}
 
 	else if( precint == 5 ) {
@@ -789,8 +819,8 @@ ncvar_get_inner <- function( ncid, varid, missval, addOffset=0., scaleFact=1.0, 
 		stop(paste("Trying to get variable of an unhandled type code: ",precint, "(", ncvar_type_to_string(precint), ")"))
 		}
 	if( verbose ) {
-		print(paste("ncvar_get: C call returned",rv$error))
-		print(paste("ncvar_get: dim of directly returned array:"))
+		print(paste("ncvar_get_inner: C call returned",rv$error))
+		print(paste("ncvar_get_inner: dim of directly returned array:"))
 		print(dim(rv$data))
 		}
 

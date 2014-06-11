@@ -43,21 +43,39 @@
  \code{ncvar4}; 8) writable, which is TRUE or FALSE, depending on whether the file
  was opened with write=TRUE or write=FALSE.
  
- The concept behind the R interface to a netCDF file is that the \code{ncdf} object
- returned by this function, as well as the list of \code{ncdim} objects contained
- in the ncdf object's "dim" list and the \code{ncvar} objects contained in the
+ The concept behind the R interface to a netCDF file is that the \code{ncdf4} object
+ returned by this function, as well as the list of \code{ncdim4} objects contained
+ in the ncdf object's "dim" list and the \code{ncvar4} objects contained in the
  ncdf object's "var" list, completely describe the netCDF file. I.e., they hold
  the entire contents of the file's metadata.  Therefore, there are no R interfaces
  to the explicit netCDF query functions, such as "nc_inq_nvars" or "nc_inq_natts".
- The upshot is, look in the ncdf object or its children to get information about
- the netCDF file.  (Note: the \code{ncdim} object is described in the help
- file for \code{\link[ncdf4]{ncdim_def}}; the \code{ncvar} object is described
+ The upshot is, look in the ncdf4 object or its children to get information about
+ the netCDF file.  (Note: the \code{ncdim4} object is described in the help
+ file for \code{\link[ncdf4]{ncdim_def}}; the \code{ncvar4} object is described
  in the help file for \code{\link[ncdf4]{ncvar_def}}).
 
+ Missing values: R uses "NA" as a missing value. Netcdf files have various 
+ standards for indicating a missing value. The most common is that a variable
+ will have an attribute named "_FillValue" indicating the value that should
+ be interpreted as a missing value. (For example, the _FillValue attribute might
+ have the value of 1.e30, indicating that any data in the netcdf file with
+ a value of 1.e30 should be interpreted as a missing value.) 
+ If the "_FillValue" attribute is found, then the ncdf4
+ package transparently maps all the netcdf file's missing values to NA's; this
+ is the most common case.
+ (The attribute "missing_value" is also recognized if there is no "_FillValue
+ attribute.) If the netcdf file does not have a missing value, then the ncdf4
+ package assigns a default missing value of 1.e30 to the netcdcf file so that R NA's,
+ which are always possible in the R environment, can be sensibly handled
+ in the netcdf file. On rare occasions this can cause problems with non-compliant
+ or incorrect netcdf files that implicitly use some particular value,
+ for example 9.96921e+36, to indicate a missing value but without 
+ setting a proper _FillValue attribute. The best way to fix such netcdf files is to explicitly
+ put in the correct _FillValue attribute using an \code{\link[ncdf4]{ncatt_put}} call.
 }
 \author{David W. Pierce \email{dpierce@ucsd.edu}}
 \seealso{ 
- \code{\link[ncdf4]{ncdim_def}}, \code{\link[ncdf4]{ncvar_def}}. 
+ \code{\link[ncdf4]{ncdim_def}}, \code{\link[ncdf4]{ncvar_def}}, \code{\link[ncdf4]{ncatt_put}}. 
 }
 \examples{
 # Define an integer dimension 

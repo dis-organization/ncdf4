@@ -25,6 +25,8 @@
 #define R_NC_TYPE_UINT64	11
 #define R_NC_TYPE_STRING	12
 
+void R_nc4_inq_varid_hier( int *ncid, char **varname, int *returned_grpid, int *returned_varid );
+
 /*********************************************************************
  * Converts from type "nc_type" to an integer as defined in the beginning 
  * of this file.  We do NOT use the raw nc_type integers because then the
@@ -196,81 +198,118 @@ void R_nc4_inq_varndims( int *ncid, int *varid, int *ndims, int *retval )
 }
 
 /*********************************************************************/
-void R_nc4_get_vara_double( int *ncid, int *varid, int *start, 
-	int *count, double *data, int *retval )
+/* Inputs:
+ *	sx_fixmiss  : is 1 if we want to fix the missing values in this
+ *  		routine, and 0 otherwise
+ * 	sx_imvstate : 0=var has no missing value; 1=var has a NA for
+ * 		the missing value; 2=var has a valid, non-NA missing value
+ *
+ * Returns a list with elements:
+ *	$error	: 0 for success, -1 for error
+ *	$data   : array of integer values read in from the netcdf file
+ */
+SEXP Rsx_nc4_get_vara_double( SEXP sx_ncid, SEXP sx_varid, SEXP sx_start, SEXP sx_count, 
+	SEXP sx_fixmiss, SEXP sx_imvstate, SEXP sx_missval )
 {
-	int	i, err, ndims;
-	size_t	s_start[MAX_NC_DIMS], s_count[MAX_NC_DIMS];
+	SEXP	sx_retval, sx_retnames, sx_reterr, sx_retdata;
+	int	ncid, varid, i, err, ndims, fixmiss, imvstate, scalar_var;
+	double	*p_data, missval, mvtol;
+	size_t	s_start[MAX_NC_DIMS], s_count[MAX_NC_DIMS], tot_size;
 	char	vn[2048];
 
-	err = nc_inq_varndims(*ncid, *varid, &ndims );
-	if( err != NC_NOERR ) 
+	/* Make space for our returned list, which will have
+	 * two elements, named $error and $data
+	 */
+	PROTECT( sx_retval = allocVector( VECSXP, 2 ));	/* 2 elements in returned list */
+
+	/* Set names for the returned list */
+	PROTECT( sx_retnames = allocVector( STRSXP, 2 ));
+	SET_STRING_ELT( sx_retnames, 0, mkChar("error") );
+	SET_STRING_ELT( sx_retnames, 1, mkChar("data" ) );
+	setAttrib( sx_retval, R_NamesSymbol, sx_retnames );
+	UNPROTECT(1);     				/* done with sx_retnames */
+
+	/* Set provisional 'no error' retval */
+	PROTECT(sx_reterr = allocVector( INTSXP, 1 ));
+	INTEGER(sx_reterr)[0] = 0;
+
+	ncid  	   	= INTEGER(sx_ncid    )[0];
+	varid 	   	= INTEGER(sx_varid   )[0];
+	fixmiss		= INTEGER(sx_fixmiss )[0];
+	imvstate	= INTEGER(sx_imvstate)[0];
+	missval		= REAL   (sx_missval )[0];
+
+	/* Get number of dimensions in this variable */
+	err = nc_inq_varndims( ncid, varid, &ndims );
+	if( err != NC_NOERR ) {
 		Rprintf( "Error in R_nc4_get_vara_double while getting ndims: %s\n", 
-			nc_strerror(*retval) );
-
-	for( i=0; i<ndims; i++ ) {
-		s_start[i] = (size_t)start[i];
-		s_count[i] = (size_t)count[i];
+			nc_strerror(err) );
+		INTEGER(sx_reterr)[0] = -1;
+		SET_VECTOR_ELT( sx_retval, 0, sx_reterr );
+		UNPROTECT(2);
+		return( sx_retval );
 		}
-		
-	*retval = nc_get_vara_double(*ncid, *varid, s_start, s_count, data );
-	if( *retval != NC_NOERR ) {
-		nc_inq_varname( *ncid, *varid, vn );
-		Rprintf( "Error in R_nc4_get_vara_double: %s\n", 
-			nc_strerror(*retval) );
-		Rprintf( "Var: %s  Ndims: %d   Start: ", vn, ndims );
-		for( i=0; i<ndims; i++ ) {
-			Rprintf( "%u", (unsigned int)s_start[i] );
-			if( i < ndims-1 )
-				Rprintf( "," );
-			}
-		Rprintf( "Count: " );
-		for( i=0; i<ndims; i++ ) {
-			Rprintf( "%u", (unsigned int)s_count[i] );
-			if( i < ndims-1 )
-				Rprintf( "," );
-			}
+
+	/* Sanity check -- number of start and count elements must
+	   match number of dims in the var
+	*/
+	scalar_var = ((ndims==0) && (GET_LENGTH(sx_start)==1) && (INTEGER(sx_start)[0]==0) && (INTEGER(sx_count)[0]==1));
+	if( (!scalar_var) && (ndims != GET_LENGTH(sx_start))) {
+		Rprintf( "Error in R_nc4_get_vara_double: I think var has %d dimensions, but passed start array is length %d. They must be the same!\n",
+			ndims, GET_LENGTH(sx_start) );
+		INTEGER(sx_reterr)[0] = -1;
+		SET_VECTOR_ELT( sx_retval, 0, sx_reterr );
+		UNPROTECT(2);
+		return( sx_retval );
 		}
-}
 
-/*********************************************************************/
-void R_nc4_get_vara_double_fixmiss( int *ncid, int *varid, int *start, 
-	int *count, int *imvstate, double *missval, double *data, int *retval )
-{
-	int	i, err, ndims;
-	size_t	s_start[MAX_NC_DIMS], s_count[MAX_NC_DIMS], tot_size, ii;
-	char	vn[2048];
-	double	mvtol;
+	if( (!scalar_var) && (ndims != GET_LENGTH(sx_count))) {
+		Rprintf( "Error in R_nc4_get_vara_double: I think var has %d dimensions, but passed count array is length %d. They must be the same!\n",
+			ndims, GET_LENGTH(sx_count) );
+		INTEGER(sx_reterr)[0] = -1;
+		SET_VECTOR_ELT( sx_retval, 0, sx_reterr );
+		UNPROTECT(2);
+		return( sx_retval );
+		}
 
-	err = nc_inq_varndims(*ncid, *varid, &ndims );
-	if( err != NC_NOERR ) 
-		Rprintf( "Error in R_nc4_get_vara_double while getting ndims: %s\n", 
-			nc_strerror(*retval) );
-
+	/* Get total number of elements we will be reading so we can 
+	 * allocate R space
+	 */
 	tot_size = 1L;
 	for( i=0; i<ndims; i++ ) {
-		s_start[i] = (size_t)start[i];
-		s_count[i] = (size_t)count[i];
-		tot_size   = tot_size * s_count[i];
+		s_start[i] = (size_t)(INTEGER(sx_start)[i]);
+		s_count[i] = (size_t)(INTEGER(sx_count)[i]);
+		tot_size *= s_count[i];
 		}
 		
-	*retval = nc_get_vara_double(*ncid, *varid, s_start, s_count, data );
-	if( *retval != NC_NOERR ) {
-		nc_inq_varname( *ncid, *varid, vn );
-		Rprintf( "Error in R_nc4_get_vara_double: %s\n", 
-			nc_strerror(*retval) );
+	/* Make space for the returned data */
+	PROTECT( sx_retdata = allocVector(REALSXP, tot_size));
+	p_data = REAL( sx_retdata );
+
+	/* Actually read in the data now */
+	err = nc_get_vara_double( ncid, varid, s_start, s_count, p_data );
+	if( err != NC_NOERR ) {
+		nc_inq_varname( ncid, varid, vn );
+		Rprintf( "Error in Rsx_nc4_get_vara_double: %s\n", 
+			nc_strerror( err ) );
 		Rprintf( "Var: %s  Ndims: %d   Start: ", vn, ndims );
 		for( i=0; i<ndims; i++ ) {
 			Rprintf( "%u", (unsigned int)s_start[i] );
 			if( i < ndims-1 )
 				Rprintf( "," );
 			}
+		Rprintf( " " );
 		Rprintf( "Count: " );
 		for( i=0; i<ndims; i++ ) {
 			Rprintf( "%u", (unsigned int)s_count[i] );
 			if( i < ndims-1 )
 				Rprintf( "," );
 			}
+		Rprintf( "\n" );
+		INTEGER(sx_reterr)[0] = -1;
+		SET_VECTOR_ELT( sx_retval, 0, sx_reterr );
+		UNPROTECT(3);
+		return( sx_retval );
 		}
 
 	/* We only do this for imvstate==2, which is a valid, non-NA
@@ -278,74 +317,152 @@ void R_nc4_get_vara_double_fixmiss( int *ncid, int *varid, int *start,
 	 * (imvstate==0) or a NA missing value (imvstate==1) then
 	 * we skip this block.
 	 */
-	if( *imvstate == 2 ) {
-		if( *missval == 0.0 ) 
+	if( (fixmiss == 1) && (imvstate == 2)) {
+		if( missval == 0.0 ) 
 			mvtol = 1.e-10;	/* arbitrary -- what are you supposed to use?? */
 		else
-			mvtol = fabs( *missval ) * 1.e-5;
+			mvtol = fabs( missval ) * 1.e-5;
 
-		for( ii=0L; ii<tot_size; ii++ ) {
-			if( fabs( data[ii] - *missval ) < mvtol )
-				data[ii] = NA_REAL;
+		for( i=0L; i<tot_size; i++ ) {
+			if( fabs( p_data[i] - missval ) < mvtol )
+				p_data[i] = NA_REAL;
 			}
 		}
+
+	/* OK we can successfully return now */
+	SET_VECTOR_ELT( sx_retval, 0, sx_reterr  );
+	SET_VECTOR_ELT( sx_retval, 1, sx_retdata );
+	UNPROTECT(3);
+	return( sx_retval );
 }
 
 /*********************************************************************/
-/* byte_style is 1 for signed, 2 for unsigned
+/* Input value byte_style is 1 for signed, 2 for unsigned
+ * 
+ * Returns a list with elements:
+ *	$error	: 0 for success, -1 for error
+ *	$data   : array of integer values read in from the netcdf file
  */
-void R_nc4_get_vara_int( int *ncid, int *varid, int *start, 
-	int *count, int *byte_style, int *data, int *retval )
+SEXP Rsx_nc4_get_vara_int( SEXP sx_ncid, SEXP sx_varid, SEXP sx_start, 
+	SEXP sx_count, SEXP sx_byte_style )
 {
-	int	i, err, ndims;
+	SEXP	sx_retval, sx_retnames, sx_reterr, sx_retdata;
+	int	ncid, varid, byte_style, i, err, ndims, *p_data, scalar_var;
 	size_t	s_start[MAX_NC_DIMS], s_count[MAX_NC_DIMS], tot_size, k;
 	char	vn[2048];
 	nc_type	nct;
 
-	err = nc_inq_varndims(*ncid, *varid, &ndims );
-	if( err != NC_NOERR ) 
-		Rprintf( "Error in R_nc4_get_vara_int while getting ndims: %s\n", 
-			nc_strerror(*retval) );
+	/* Make space for our returned list, which will have
+	 * two elements, named $error and $data
+	 */
+	PROTECT( sx_retval = allocVector( VECSXP, 2 ));	/* 2 elements in returned list */
 
+	/* Set names for the returned list */
+	PROTECT( sx_retnames = allocVector( STRSXP, 2 ));
+	SET_STRING_ELT( sx_retnames, 0, mkChar("error") );
+	SET_STRING_ELT( sx_retnames, 1, mkChar("data" ) );
+	setAttrib( sx_retval, R_NamesSymbol, sx_retnames );
+	UNPROTECT(1);     				/* done with sx_retnames */
+
+	/* Set provisional 'no error' retval */
+	PROTECT(sx_reterr = allocVector( INTSXP, 1 ));
+	INTEGER(sx_reterr)[0] = 0;
+
+	ncid  	   = INTEGER(sx_ncid      )[0];
+	varid 	   = INTEGER(sx_varid     )[0];
+	byte_style = INTEGER(sx_byte_style)[0];
+
+	/* Get number of dimensions in this variable */
+	err = nc_inq_varndims( ncid, varid, &ndims );
+	if( err != NC_NOERR ) {
+		Rprintf( "Error in R_nc4_get_vara_int while getting ndims: %s\n", 
+			nc_strerror(err) );
+		INTEGER(sx_reterr)[0] = -1;
+		SET_VECTOR_ELT( sx_retval, 0, sx_reterr );
+		UNPROTECT(2);
+		return( sx_retval );
+		}
+
+	/* Sanity check -- number of start and count elements must
+	   match number of dims in the var
+	*/
+	scalar_var = ((ndims==0) && (GET_LENGTH(sx_start)==1) && (INTEGER(sx_start)[0]==0) && (INTEGER(sx_count)[0]==1));
+	if( (!scalar_var) && (ndims != GET_LENGTH(sx_start))) {
+		Rprintf( "Error in R_nc4_get_vara_int: I think var has %d dimensions, but passed start array is length %d. They must be the same!\n",
+			ndims, GET_LENGTH(sx_start) );
+		INTEGER(sx_reterr)[0] = -1;
+		SET_VECTOR_ELT( sx_retval, 0, sx_reterr );
+		UNPROTECT(2);
+		return( sx_retval );
+		}
+
+	if( (!scalar_var) && (ndims != GET_LENGTH(sx_count))) {
+		Rprintf( "Error in R_nc4_get_vara_int: I think var has %d dimensions, but passed count array is length %d. They must be the same!\n",
+			ndims, GET_LENGTH(sx_count) );
+		INTEGER(sx_reterr)[0] = -1;
+		SET_VECTOR_ELT( sx_retval, 0, sx_reterr );
+		UNPROTECT(2);
+		return( sx_retval );
+		}
+
+	/* Get total number of elements we will be reading so we can 
+	 * allocate R space
+	 */
 	tot_size = 1L;
 	for( i=0; i<ndims; i++ ) {
-		s_start[i] = (size_t)start[i];
-		s_count[i] = (size_t)count[i];
+		s_start[i] = (size_t)(INTEGER(sx_start)[i]);
+		s_count[i] = (size_t)(INTEGER(sx_count)[i]);
 		tot_size *= s_count[i];
 		}
 		
-	*retval = nc_get_vara_int(*ncid, *varid, s_start, s_count, data );
-	if( *retval != NC_NOERR ) {
-		nc_inq_varname( *ncid, *varid, vn );
-		Rprintf( "Error in R_nc4_get_vara_int: %s\n", 
-			nc_strerror(*retval) );
+	/* Make space for the returned data */
+	PROTECT( sx_retdata = allocVector(INTSXP, tot_size));
+	p_data = INTEGER( sx_retdata );
+
+	/* Actually read in the data now */
+	err = nc_get_vara_int( ncid, varid, s_start, s_count, p_data );
+	if( err != NC_NOERR ) {
+		nc_inq_varname( ncid, varid, vn );
+		Rprintf( "Error in Rsx_nc4_get_vara_int: %s\n", 
+			nc_strerror( err ) );
 		Rprintf( "Var: %s  Ndims: %d   Start: ", vn, ndims );
 		for( i=0; i<ndims; i++ ) {
 			Rprintf( "%u", (unsigned int)s_start[i] );
 			if( i < ndims-1 )
 				Rprintf( "," );
 			}
-		Rprintf( "Count: " );
+		Rprintf( " Count: " );
 		for( i=0; i<ndims; i++ ) {
 			Rprintf( "%u", (unsigned int)s_count[i] );
 			if( i < ndims-1 )
 				Rprintf( "," );
 			}
+		Rprintf( "\n" );
+		INTEGER(sx_reterr)[0] = -1;
+		SET_VECTOR_ELT( sx_retval, 0, sx_reterr );
+		UNPROTECT(3);
+		return( sx_retval );
 		}
 
-	*retval = nc_inq_vartype( *ncid, *varid, &nct );
+	err = nc_inq_vartype( ncid, varid, &nct );
 	if( nct == NC_BYTE ) {
 		/* netcdf library for reading from byte to int, as we do here,
 		 * is SIGNED.  So, if user requests signed, we don't have to
 		 * do anything; only adjust if user asks for unsigned.
 		 */
-		if( *byte_style == 2 ) {	/* unsigned */
+		if( byte_style == 2 ) {	/* unsigned */
 			for( k=0L; k<tot_size; k++ ) {
-				if( data[k] < 0 )
-					data[k] += 256;
+				if( p_data[k] < 0 )
+					p_data[k] += 256;
 				}
 			}
 		}
+
+	/* OK we can successfully return now */
+	SET_VECTOR_ELT( sx_retval, 0, sx_reterr  );
+	SET_VECTOR_ELT( sx_retval, 1, sx_retdata );
+	UNPROTECT(3);
+	return( sx_retval );
 }
 
 /*********************************************************************/
@@ -382,12 +499,13 @@ void R_nc4_get_vara_text( int *ncid, int *varid, int *start,
 			if( i < ndims-1 )
 				Rprintf( "," );
 			}
-		Rprintf( "Count: " );
+		Rprintf( " Count: " );
 		for( i=0; i<ndims; i++ ) {
 			Rprintf( "%u", (unsigned int)s_count[i] );
 			if( i < ndims-1 )
 				Rprintf( "," );
 			}
+		Rprintf( "\n" );
 		}
 
 	/* Now copy each string over to the final data array */
@@ -426,6 +544,7 @@ void R_nc4_inq_dimid( int *ncid, char **dimname, int *dimid )
 }
 
 /*********************************************************************/
+/* See also the version for hierarchial groups, R_nc4_inq_varid_hier below. */ 
 /* Returns -1 if the var is not found in the file */
 void R_nc4_inq_varid( int *ncid, char **varname, int *varid )
 {
@@ -855,37 +974,69 @@ SEXP R_nc4_get_att_string( SEXP sx_ncid, SEXP sx_varid, SEXP sx_attname, SEXP sx
 }
 
 /*********************************************************************/
-void R_nc4_put_vara_double( int *ncid, int *varid, int *start,
-	int *count, double *data, int *retval )
+SEXP Rsx_nc4_put_vara_double( SEXP sx_ncid, SEXP sx_varid, SEXP sx_start,
+	SEXP sx_count, SEXP sx_data )
 {
-	int i, ndims, err, verbose;
-	size_t s_start[MAX_NC_DIMS], s_count[MAX_NC_DIMS];
-	char   varname[MAX_NC_NAME];
+	int 	ncid, varid, i, ndims, err, verbose, scalar_var;
+	size_t  s_start[MAX_NC_DIMS], s_count[MAX_NC_DIMS];
+	char    varname[MAX_NC_NAME];
+	SEXP	sx_retval;
+
+	ncid  = INTEGER(sx_ncid )[0];
+	varid = INTEGER(sx_varid)[0];
 
 	verbose = 0;
 
 	if( verbose ) {
-		err = nc_inq_varname( *ncid, *varid, varname );
-		Rprintf( "R_nc4_put_vara_double: entering with ncid=%d, varid=%d  (varname=%s)\n", 
-				*ncid, *varid, varname );
+		err = nc_inq_varname( ncid, varid, varname );
+		Rprintf( "Rsx_nc4_put_vara_double: entering with ncid=%d, varid=%d  (varname=%s)\n", 
+				ncid, varid, varname );
 		}
 
+	/* Set provisional 'no error' retval */
+	PROTECT(sx_retval = NEW_NUMERIC(1));
+	NUMERIC_POINTER(sx_retval)[0] = 0;
+
 	/* Get # of dims for this var */
-	err = nc_inq_varndims( *ncid, *varid, &ndims );
-	if( err != NC_NOERR )
-		Rprintf( "Error on nc_inq_varndims call in R_nc4_put_vara_double: %s\n", 
-			nc_strerror(*retval) );
+	err = nc_inq_varndims( ncid, varid, &ndims );
+	if( err != NC_NOERR ) {
+		Rprintf( "Error on nc_inq_varndims call in Rsx_nc4_put_vara_double: %s\n", 
+			nc_strerror(err) );
+		NUMERIC_POINTER(sx_retval)[0] = -1;
+		UNPROTECT(1);
+		return( sx_retval );
+		}
 	if( verbose ) 
-		Rprintf( "R_nc4_put_vara_double: for this var ndims=%d\n", ndims );
+		Rprintf( "Rsx_nc4_put_vara_double: for this var ndims=%d\n", ndims );
+
+	/* Sanity check -- number of start and count elements must
+	   match nubmer of dims in the var
+	*/
+	scalar_var = ((ndims==0) && (GET_LENGTH(sx_start)==1) && (INTEGER(sx_start)[0]==0) && (INTEGER(sx_count)[0]==1));
+	if( (!scalar_var) && (ndims != GET_LENGTH(sx_start))) {
+		Rprintf( "Error in Rsx_nc4_put_vara_double: I think var has %d dimensions, but passed start array is length %d. They must be the same!\n",
+			ndims, GET_LENGTH(sx_start) );
+		NUMERIC_POINTER(sx_retval)[0] = -1;
+		UNPROTECT(1);
+		return( sx_retval );
+		}
+
+	if( (!scalar_var) && (ndims != GET_LENGTH(sx_count))) {
+		Rprintf( "Error in Rsx_nc4_put_vara_double: I think var has %d dimensions, but passed count array is length %d. They must be the same!\n",
+			ndims, GET_LENGTH(sx_count) );
+		NUMERIC_POINTER(sx_retval)[0] = -1;
+		UNPROTECT(1);
+		return( sx_retval );
+		}
 
 	/* Copy over from ints to size_t */
 	for( i=0; i<ndims; i++ ) {
-		s_start[i] = (size_t)start[i];
-		s_count[i] = (size_t)count[i];
-		} 
+		s_start[i] = (size_t)(INTEGER(sx_start)[i]);
+		s_count[i] = (size_t)(INTEGER(sx_count)[i]);
+		}
 
 	if( verbose ) {
-		Rprintf( "R_nc4_put_vara_double: about to write with start=" );
+		Rprintf( "Rsx_nc4_put_vara_double: about to write with start=" );
 		for( i=0; i<ndims; i++ ) 
 			Rprintf("%d ", s_start[i] );
 		Rprintf( "   count=" );
@@ -894,55 +1045,84 @@ void R_nc4_put_vara_double( int *ncid, int *varid, int *start,
 		Rprintf( "\n" );
 		}
 
-	*retval = nc_put_vara_double(*ncid, *varid, s_start, s_count, data );
-	if( *retval != NC_NOERR ) 
-		Rprintf( "Error in R_nc4_put_vara_double: %s\n", 
-			nc_strerror(*retval) );
+	err = nc_put_vara_double( ncid, varid, s_start, s_count, REAL(sx_data) );
+	if( err != NC_NOERR ) {
+		Rprintf( "Error in Rsx_nc4_put_vara_double: %s\n", nc_strerror(err) );
+		NUMERIC_POINTER(sx_retval)[0] = -1;
+		UNPROTECT(1);
+		return( sx_retval );
+		}
+
 	if( verbose ) 
-		Rprintf( "R_nc4_put_vara_double: returning with errval=%d\n", *retval );
+		Rprintf( "Rsx_nc4_put_vara_double: successful return\n" );
+
+	UNPROTECT(1);
+	return( sx_retval );
 }
 
 /*********************************************************************/
-void R_nc4_put_vara_int( int *ncid, int *varid, int *start,
-	int *count, int *data, int *retval )
+SEXP Rsx_nc4_put_vara_int( SEXP sx_ncid, SEXP sx_varid, SEXP sx_start,
+	SEXP sx_count, SEXP sx_data )
 {
-	int i, ndims, err;
+	int 	ncid, varid, i, ndims, err, scalar_var;
 	size_t s_start[MAX_NC_DIMS], s_count[MAX_NC_DIMS];
+	SEXP	sx_retval;
+
+	/* Set provisional 'no error' retval */
+	PROTECT(sx_retval = NEW_NUMERIC(1));
+	NUMERIC_POINTER(sx_retval)[0] = 0;
+
+	ncid  = INTEGER(sx_ncid )[0];
+	varid = INTEGER(sx_varid)[0];
 
 	/* Get # of dims for this var */
-	err = nc_inq_varndims( *ncid, *varid, &ndims );
-	if( err != NC_NOERR )
-		Rprintf( "Error on nc_inq_varndims call in R_nc4_put_vara_int: %s\n", 
-			nc_strerror(*retval) );
+	err = nc_inq_varndims( ncid, varid, &ndims );
+	if( err != NC_NOERR ) {
+		Rprintf( "Error on nc_inq_varndims call in Rsx_nc4_put_vara_int: %s\n", 
+			nc_strerror(err) );
+		NUMERIC_POINTER(sx_retval)[0] = -1;
+		UNPROTECT(1);
+		return( sx_retval );
+		}
+
+	/* Sanity check -- number of start and count elements must
+	   match nubmer of dims in the var
+	*/
+	scalar_var = ((ndims==0) && (GET_LENGTH(sx_start)==1) && (INTEGER(sx_start)[0]==0) && (INTEGER(sx_count)[0]==1));
+	if( (!scalar_var) && (ndims != GET_LENGTH(sx_start))) {
+		Rprintf( "Error in Rsx_nc4_put_vara_int: I think var has %d dimensions, but passed start array is length %d. They must be the same!\n",
+			ndims, GET_LENGTH(sx_start) );
+		NUMERIC_POINTER(sx_retval)[0] = -1;
+		UNPROTECT(1);
+		return( sx_retval );
+		}
+
+	if( (!scalar_var) && (ndims != GET_LENGTH(sx_count))) {
+		Rprintf( "Error in Rsx_nc4_put_vara_int: I think var has %d dimensions, but passed count array is length %d. They must be the same!\n",
+			ndims, GET_LENGTH(sx_count) );
+		NUMERIC_POINTER(sx_retval)[0] = -1;
+		UNPROTECT(1);
+		return( sx_retval );
+		}
 
 	/* Copy over from ints to size_t */
 	for( i=0; i<ndims; i++ ) {
-		s_start[i] = (size_t)start[i];
-		s_count[i] = (size_t)count[i];
+		s_start[i] = (size_t)(INTEGER(sx_start)[i]);
+		s_count[i] = (size_t)(INTEGER(sx_count)[i]);
 		}
 
-	*retval = nc_put_vara_int(*ncid, *varid, s_start, s_count, data );
-	if( *retval != NC_NOERR ) 
-		Rprintf( "Error in R_nc4_put_vara_int: %s\n", 
-			nc_strerror(*retval) );
-}
+	/* Actually write the data now */
+	err = nc_put_vara_int(ncid, varid, s_start, s_count, INTEGER(sx_data) );
+	if( err != NC_NOERR ) {
+		Rprintf( "Error in Rsx_nc4_put_vara_int: %s\n", 
+			nc_strerror(err) );
+		NUMERIC_POINTER(sx_retval)[0] = -1;
+		UNPROTECT(1);
+		return( sx_retval );
+		}
 
-/*********************************************************************/
-void R_nc4_put_var_int( int *ncid, int *varid, int *data, int *retval )
-{
-	*retval = nc_put_var_int(*ncid, *varid, data );
-	if( *retval != NC_NOERR ) 
-		Rprintf( "Error in R_nc4_put_var_int: %s\n", 
-			nc_strerror(*retval) );
-}
-
-/*********************************************************************/
-void R_nc4_put_var_double( int *ncid, int *varid, double *data, int *retval )
-{
-	*retval = nc_put_var_double(*ncid, *varid, data );
-	if( *retval != NC_NOERR ) 
-		Rprintf( "Error in R_nc4_put_var_double: %s\n", 
-			nc_strerror(*retval) );
+	UNPROTECT(1);
+	return( sx_retval );
 }
 
 /**************************************************************************************************************/
@@ -1543,5 +1723,110 @@ SEXP R_nc4_inq_format(SEXP sx_root_id, SEXP sx_ierr_retval)
 	UNPROTECT(1);
 
 	return(sx_retval); 
+}
+
+/*********************************************************************/
+/* This goes through an input array, and replaces all NA's in that array
+ * with the passed value.
+ */
+SEXP R_nc4_set_NA_to_val_double(SEXP sx_dat, SEXP sx_val )
+{
+	int		nels;
+	size_t		i;
+	double		val = REAL(sx_val)[0];
+
+	nels = GET_LENGTH( sx_dat );
+
+	for( i=0L; i<nels; i++ ) {
+		if( ISNA(REAL(sx_dat)[i]) ) 
+			NUMERIC_POINTER(sx_dat)[i] = val;
+		}
+
+	return( R_NilValue );
+}
+
+/************************************************************************************************/
+/* Returned index_first_slash is 0-based counting 
+ */
+int R_nc4_util_nslashes( char *s, int *idx_first_slash ) 
+{
+	int	i, nslashes;
+
+	nslashes = 0;
+	*idx_first_slash = -1;
+	for( i=0; i<strlen(s); i++ ) {
+		if( s[i] == '/' ) {
+			nslashes++;
+			if( *idx_first_slash == -1 ) 
+				*idx_first_slash = i;
+			}
+		}
+
+	return( nslashes );
+}
+
+/****************************************************************************************/
+void R_nc4_inq_varid_hier_inner( int *ncid, char *varname, int *returned_grpid, int *returned_varid )
+{
+	int ierr, nslashes, idx_first_slash, gid;
+	char gname[MAX_NC_NAME];
+
+/* Rprintf("R_nc4_inq_varid_hier_inner: Entering with varname=>%s<\n", varname ); */
+
+	/* Passed var name must not start with a slash */
+	if( varname[0] == '/' ) {
+		Rprintf( "Error in R_nc4_varid_hier: passed varname must not start with a slash!\n" );
+		*returned_varid = -1;
+		*returned_grpid = -1;
+		return;
+		}
+
+	/* If there are no forward slashes in the name, then it is a simple var name */
+	nslashes = R_nc4_util_nslashes( varname, &idx_first_slash );
+/* Rprintf("R_nc4_inq_varid_hier_inner: varname >%s< has nslashes=%d and idx first slash=%d\n", varname, nslashes, idx_first_slash ); */
+	if( nslashes == 0 ) {
+		*returned_grpid = *ncid;
+		ierr = nc_inq_varid(*ncid, varname, returned_varid );
+		if( ierr != NC_NOERR ) {
+			*returned_varid = -1;
+			*returned_grpid = -1;
+			}
+/* Rprintf("R_nc4_inq_varid_hier_inner: Found id for var >%s< varid:%d gid:%d\n", varname, *returned_varid, *returned_grpid ); */
+		return;
+		}
+
+	/* If we get here then the varname must have at least one slash, which indicates
+	 * a group name under the current group name. Get the ID of that group
+	 */
+	strncpy( gname, varname, idx_first_slash );
+	gname[ idx_first_slash ] = '\0';
+	ierr = nc_inq_grp_ncid( *ncid, gname, &gid );
+	if( ierr != NC_NOERR ) {
+		Rprintf( "Error in R_nc4_varid_hier: extracted groupname not found: >%s< (coding error?)\n", gname );
+		*returned_varid = -1;
+		*returned_grpid = -1;
+		return;
+		}
+
+	/* Call ourselves recursively with the subgroup id and the varname stripped
+	 * of its leading group name
+	 */
+/* Rprintf("R_nc4_inq_varid_hier_inner: calling myself recursively with varname=>%s<\n", varname+idx_first_slash+1 ); */
+	R_nc4_inq_varid_hier_inner( &gid, varname+idx_first_slash+1, returned_grpid, returned_varid );
+}
+
+/****************************************************************************************/
+/* This version of inq_varid works with hierarchial var names such as "model1/TS" and
+ * returns both the group ID and the var ID in that group, given the root group id
+ * (netcdf file ID).
+ *
+ * If the passed var is not found in the file, then -1 is returned.
+ *
+ * The passed slash-ful varname must not start or end with a slash.
+ */
+void R_nc4_inq_varid_hier( int *ncid, char **varname, int *returned_grpid, int *returned_varid )
+{
+/* Rprintf("R_nc4_inq_varid_hier: entering for var >%s<\n", varname[0] ); */
+	R_nc4_inq_varid_hier_inner( ncid, varname[0], returned_grpid, returned_varid );
 }
 

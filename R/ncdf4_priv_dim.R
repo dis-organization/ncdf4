@@ -126,7 +126,8 @@ ncdim_create <- function( nc, d, verbose=FALSE ) {
 		#---------------------------------
 		# Put in the dimvals as specified.
 		#---------------------------------
-		nc_enddef( nc )		# Must exit define mode for this
+		#nc_enddef( nc, ignore_safemode=TRUE )		# Must exit define mode for this
+		nc_enddef( nc )
 		rv <- list()
 		rv$error <- -1
 		start <- 0		# Use C convention
@@ -134,34 +135,37 @@ ncdim_create <- function( nc, d, verbose=FALSE ) {
 		if( count > 0 ) {
 			if( storage.mode(d$vals) == "integer" ) {
 				if( verbose )
-					print(paste("ncdim_create: about to call R_nc4_put_vara_int dimvals for dimvar",d$name))
-				rv <- .C("R_nc4_put_vara_int",
+					print(paste("ncdim_create: about to call R_nc4_put_vara_int dimvals for dimvar",d$name, 
+						' ncid=', as.integer(ncid2use),
+						' dimvarid=', as.integer(dimvar$id),
+						' start=', paste(as.integer(start),collapse=' '),
+						' count=', paste(as.integer(count),collapse=' ')))
+				rv_error <- .Call("Rsx_nc4_put_vara_int",
 					as.integer(ncid2use),
 					as.integer(dimvar$id),
 					as.integer(start),
 					as.integer(count),
 					as.integer(d$vals),
-					error=as.integer(rv$error),
 					PACKAGE="ncdf4")
 				}
 			else if( storage.mode(d$vals) == "double" ) {
 				if( verbose )
-					print(paste("ncdim_create: about to call R_nc4_put_vara_double dimvals for dimvar",d$name))
-				rv <- .C("R_nc4_put_vara_double",
+					print(paste("ncdim_create: about to call Rsx_nc4_put_vara_double dimvals for dimvar",d$name))
+				rv_error <- .Call("Rsx_nc4_put_vara_double",
 					as.integer(ncid2use),
 					as.integer(dimvar$id),
 					as.integer(start),
 					as.integer(count),
 					as.double(d$vals),
-					error=as.integer(rv$error),
 					PACKAGE="ncdf4")
 				}
 			else
 				stop(paste("ncdim_create: unknown storage mode:",storage.mode(d$vals),"for dim",d$name))
-			if( rv$error != 0 )
+			if( rv_error != 0 )
 				stop("Error in ncdim_create, while writing dimvar values!")
 			}
-		nc_redef( nc )	# Go back into define mode
+		#nc_redef( nc, ignore_safemode=TRUE )	# Go back into define mode
+		nc_redef( nc )
 
 		#----------------------------------------------------
 		# Set the dimension's (dimvar's, actually) attributes

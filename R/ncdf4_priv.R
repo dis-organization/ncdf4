@@ -253,3 +253,35 @@ ncdf4_format <- function( root_id ) {
 		stop(paste("C call R_nc4_inq_format returned value",rv,"which is not recognized"))
 }
 
+#==========================================================================================
+# A simple and direct file opener, given a netcdf4 object "nc". Used as part of safemode.
+# Returns integer ncid.
+#
+ncdf4_inner_open = function( nc ) {
+
+	if( class( nc ) != 'ncdf4' ) 
+		stop(paste("ncdf4 library: internal error: ncdf4_inner_open called with an object that is NOT class ncdf4!"))
+
+	rv <- list()
+
+	if( is.null(nc$writable)) 
+		stop(paste("Internal error: ncdf4_inner_open called with no $writable element on file", nc$filename))
+	if( nc$writable )
+		rv$cmode <- 1
+	else
+		rv$cmode <- 0
+
+	rv$id    <- -1
+	rv$error <- -1
+	rv <- .C("R_nc4_open",
+		as.character(nc$filename),
+		as.integer(rv$cmode),		# write mode=1, read only=0
+		id=as.integer(rv$id),		# note: nc$id is the simple integer ncid of the base file (root group in the file)
+		error=as.integer(rv$error),
+		PACKAGE="ncdf4")
+	if( rv$error != 0 ) 
+		stop(paste("Error in nc_open trying to open file",nc$filename))
+
+	return( rv$id )
+}
+

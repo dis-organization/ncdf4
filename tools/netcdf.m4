@@ -6,7 +6,7 @@ dnl version-4 netcdf library that includes the script "nc-config", which is quer
 dnl for the information.  "nc-config" first appeared in netcdf release 4.1-beta2, which
 dnl is what this is tested with.  
 dnl
-dnl Defines NETCDF_LIBS, NETCDF_CPPFLAGS, NETCDF_LDFLAGS, and NETCDR_RPATH, or exits with an error message.
+dnl Defines NETCDF_LIBS, NETCDF_CPPFLAGS, NETCDF_LDFLAGS, and NETCDF_RPATH, or exits with an error message.
 dnl I.e., the intent is to have this used when the application REQUIRES the netcdf v4 library.
 dnl
 dnl version 1.0    
@@ -84,11 +84,10 @@ dnl -------------------------------------------------------------------
 NETCDF_RPATH=' '
 echo "netcdf.m4: about to set rpath, here is source string: >$NETCDF_LDFLAGS<"
 for word in $NETCDF_LDFLAGS; do
-	if test `expr $word : -L/` -eq 3; then
-		slibdir=`expr substr $word 3 9999`
-		if test -n "$slibdir"; then
-			NETCDF_RPATH="$NETCDF_RPATH -Wl,-rpath,$slibdir"
-		fi
+	v2=`expr "$word" : '-L/'`
+	if test $v2 -eq 3; then
+		slibdir=${word:2}
+		NETCDF_RPATH="$NETCDF_RPATH -Wl,-rpath,$slibdir"
 	fi
 done
 echo "netcdf.m4: final rpath: $NETCDF_RPATH"

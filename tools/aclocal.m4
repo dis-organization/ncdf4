@@ -12,4 +12,4 @@
 # even the implied warranty of MERCHANTABILITY or FITNESS FOR A
 # PARTICULAR PURPOSE.
 
-m4_include([m4macros/netcdf.m4])
+m4_include([netcdf.m4])

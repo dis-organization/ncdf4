@@ -252,52 +252,60 @@ nc_parse_group_structure <- function( vars, verbose=FALSE ) {
 			}
 		else
 			{
-			#--------------------------------------------------------------------
-			# This var has a group, see if its group is already on the group list
-			#--------------------------------------------------------------------
-			ng <- length(group)
+			#---------------------------------------------------------------------------------------
+			# This var has a group, see if its group and parent groups are already on the group list
+			# Many thanks to Georg Schnabel for contributing code that handles multiple levels of 
+			# groups in the following code.
+			#---------------------------------------------------------------------------------------
 			my_fqgn <- nc4_basename( vv$name, dir=TRUE )
 			if( debug ) print(paste('nc_parse_group_structure: var', vv$name, 'is in group', my_fqgn))
-			gidx <- -1
-			for( ig in 1:ng ) {
-				if( my_fqgn == group[[ig]]$fqgn ) {
-					gidx <- ig
-					break
-					}
-				}
-			if( gidx == -1 ) {
-				#---------------------------------------------
-				# This group is not on the list yet, so add it
-				#---------------------------------------------
-				if( debug ) print(paste('nc_parse_group_structure: adding group', my_fqgn, ' to group list as a new entry'))
+
+			my_grpnames <- unlist(strsplit(my_fqgn,"/",fixed=TRUE))
+			for (isubgrp in seq_along(my_grpnames)) {
+				my_subgrp <- paste(my_grpnames[1:isubgrp],collapse="/")
 				ng <- length(group)
-				my_fqpn <- nc4_basename(my_fqgn,dir=TRUE)
-				group[[ng+1]] <- list( name=nc4_basename(my_fqgn), fqgn=my_fqgn, fqpn=my_fqpn, var=list( vv ), dim=list() )
-				names(group)[ng+1] <- my_fqgn		# set 'names' array to fqgn
-				}
-			else
-				{
-				#-------------------------------------------------
-				# This group is already on the list at index gidx; 
-				# add this var to that list
-				#-------------------------------------------------
-				if( debug ) print(paste('nc_parse_group_structure: group', my_fqgn, ' is on the group list, so just adding var', vv$name,' to that group on the list'))
-				#-----------------------------------------------------------------
-				# Make sure there is not already a var with this name in the group
-				#-----------------------------------------------------------------
-				nv <- length( group[[gidx]]$var )
-				for( iv in nc4_loop(1,nv) ) {
-					if( vv$name == group[[gidx]]$var[[iv]]$name ) {
-						stop(paste("Error, trying to add var named", 
-							vv$name, " to group", group[[gidx]]$name, "but there is already ",
-							"a var named ", group[[gidx]]$var[[iv]]$name,
-							"in that group.  Have you mistakenly added ",
-							"the same var twice?  Have you correctly specifed ",
-							"the groups of any variables with duplicated names?"))
+				gidx <- -1
+
+				for( ig in 1:ng ) {
+					if( my_subgrp == group[[ig]]$fqgn ) {
+						gidx <- ig
+						break
 						}
 					}
-				group[[gidx]]$var[[nv+1]] <- vv
+
+				if( gidx == -1 ) {
+					#---------------------------------------------
+					# This group is not on the list yet, so add it
+					#---------------------------------------------
+					if( debug ) print(paste('nc_parse_group_structure: adding group', my_subgrp, ' to group list as a new entry'))
+					ng <- length(group)
+					my_fqpn <- nc4_basename(my_subgrp,dir=TRUE)
+					group[[ng+1]] <- list( name=nc4_basename(my_subgrp), fqgn=my_subgrp, fqpn=my_fqpn, var=list(), dim=list() )
+					names(group)[ng+1] <- my_subgrp		# set 'names' array to fqgn
+					gidx <- ng+1
+					}
+				}   
+
+			#-------------------------------------------------
+			# Add the var to its associated group on the list 
+			#-------------------------------------------------      
+			if( debug ) print(paste('nc_parse_group_structure: group', my_fqgn, ' is on the group list, so just adding var', vv$name,' to that group on the list'))
+
+			#-----------------------------------------------------------------
+			# Make sure there is not already a var with this name in the group
+			#-----------------------------------------------------------------
+			nv <- length( group[[gidx]]$var )
+			for( iv in nc4_loop(1,nv) ) {
+				if( vv$name == group[[gidx]]$var[[iv]]$name ) {
+					stop(paste("Error, trying to add var named", 
+					vv$name, " to group", group[[gidx]]$name, "but there is already ",
+					"a var named ", group[[gidx]]$var[[iv]]$name,
+					"in that group.  Have you mistakenly added ",
+					"the same var twice?  Have you correctly specifed ",
+					"the groups of any variables with duplicated names?"))
+					}
 				}
+			group[[gidx]]$var[[nv+1]] <- vv
 			}
 
 		#------------------------------------------------------------

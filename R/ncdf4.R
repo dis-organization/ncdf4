@@ -72,6 +72,10 @@
 #	var	: a list of ncvar objects
 #	writable: TRUE or FALSE
 #	is_GMT	: TRUE if is a "GMT-style" netcdf file, FALSE otherwise
+#	safemode : TRUE if safe mode is on, in which case files will only 
+#		be opened before they are used, and will be closed
+#		immediately afterwards. This is currently needed for the
+#		Windows-64 port.
 #
 # class: ncdim4 (returned by ncdim_def, which creates a NEW 
 #		netCDF dimension in memory, and part of the list of dims
@@ -125,7 +129,7 @@
 #======================================================================================================
 nc_version <- function() {
 	
-	return("ncdf4_1.10_20130806")
+	return("ncdf4_1.12_20140613")
 
 }
 
@@ -239,8 +243,9 @@ print.ncdf4 <- function( x, ... ) {
 
 	is_netcdf_v4 = (nc$format == 'NC_FORMAT_NETCDF4')
 	is_GMT       = ifelse( nc$is_GMT, ' (GMT format)', '' )
+	is_safemode  = ifelse( nc$safemode, ' (SAFE MODE ON)', '' )
 
-	print(paste("File ",nc$filename, " (", nc$format, ")", is_GMT, ":", sep=''))
+	print(paste("File ",nc$filename, " (", nc$format, ")", is_GMT, is_safemode, ":", sep=''))
 	print("")
 	print(paste("    ",nc$nvars,"variables (excluding dimension variables):"))
 	if( nc$nvars > 0 ) {
@@ -484,6 +489,10 @@ ncvar_def <- function( name, units, dim, missval, longname=name, prec="float",
 		for( i in 1:var$ndims ) {
 			if( var$dim[[i]]$unlim ) 
 				varunlimited <- TRUE
+			if( i == 1 ) 
+				var$varsize = var$dim[[i]]$len 
+			else
+				var$varsize = append( var$varsize, var$dim[[i]]$len )
 			}
 		}
 	var$unlim <- varunlimited
@@ -504,8 +513,15 @@ ncvar_def <- function( name, units, dim, missval, longname=name, prec="float",
 # in the values yourself with a 'ncvar_get' call, instead of
 # accessing the ncid$dim[[DIMNAME]]$vals array.
 #
+# If 'safemode' is set, then safemode will be set to whatever
+# the supplied value of safemode is.
+# If 'safemode' is NOT set, then safemode will be OFF unless
+# we are on the Windows-64 platform, in which case it will be ON.
+#
 nc_open <- function( filename, write=FALSE, readunlim=TRUE, verbose=FALSE,
 		auto_GMT=TRUE, suppress_dimvals=FALSE ) {
+
+	safemode = FALSE
 
 	if( verbose ) print(paste("nc_open: entering, ncdf4 package version", nc_version() ))
 
@@ -523,7 +539,7 @@ nc_open <- function( filename, write=FALSE, readunlim=TRUE, verbose=FALSE,
 	rv$error <- -1
 	rv <- .C("R_nc4_open",
 		as.character(filename),
-		as.integer(rv$cmode),
+		as.integer(rv$cmode),		# write mode=1, read only=0
 		id=as.integer(rv$id),		# note: nc$id is the simple integer ncid of the base file (root group in the file)
 		error=as.integer(rv$error),
 		PACKAGE="ncdf4")
@@ -537,6 +553,28 @@ nc_open <- function( filename, write=FALSE, readunlim=TRUE, verbose=FALSE,
 	#-------------------------------------------------
 	nc <- list( filename=filename, writable=write, id=rv$id )
 	attr(nc,"class") <- "ncdf4"
+
+	#---------------------------------------------------------
+	# This must be ON for Windows-7 64-bit, off for everything
+	# else (as of Feb 2014)
+	#---------------------------------------------------------
+	am_windows = (length(grep( 'windows', .Platform$OS.type, ignore.case=TRUE)) != 0)
+	am_64      = (length(grep( 'x64',     .Platform$r_arch,  ignore.case=TRUE)) != 0)
+#	nc$safemode <- (am_windows && am_64)
+# Buggy at the moment??  DWP 6 June 2014
+nc$safemode = FALSE
+	if( nc$safemode && (!is.na(safemode)) && (safemode == FALSE) ) {
+		print(paste("***************** W A R N I N G *****************************"))
+		print(paste("You are running on Windows-64 but have specified to force the"))
+		print(paste("safemode OFF. Safemode protects from KNOWN BUGS of the netcdf"))
+		print(paste("library on Windows-64. If you force safemode off YOU MUST NEVER"))
+		print(paste("HAVE MORE THAN ONE NETCDF FILE OPEN AT THE SAME TIME, or you"))
+		print(paste("may get errors of the type that the ncdf4 operators access the"))
+		print(paste("WRONG FILE. You are proceeding at your own risk!!"))
+		print(paste("***************************************************************"))
+		}
+	if( !is.na(safemode))
+		nc$safemode = safemode
 
 	#-------------------------------------------------------------
 	# See what format this file is.  Possible (string) values are:
@@ -962,6 +1000,16 @@ nc_open <- function( filename, write=FALSE, readunlim=TRUE, verbose=FALSE,
 
 	attr(nc$var,"names") <- varnames
 
+	#----------------------------------------------------------------------------
+	# If we are running in safe mode, CLOSE THE FILE before exiting. Note that
+	# this invalidates ncid, so anytime subsequent to this when we want to
+	# access a file in safe mode, we cannot use the stored ncid, which is invalid
+	#----------------------------------------------------------------------------
+	if( nc$safemode ) {
+		rv = .C("R_nc4_close", as.integer(nc$id), PACKAGE="ncdf4")
+		nc$id = -1	# invalidate this ID since it's not valid any more (duh)
+		}
+
 	if( verbose )
 		print(paste("nc_open: leaving for ncid=",nc$id))
 
@@ -994,8 +1042,18 @@ ncvar_change_missval <- function( nc, varid, missval ) {
 		stop(paste("Error, did not specify enough information to identify where var is on the global var list. Are you trying to change the missing value for a dimvar? That operation is not supported"))
 	nc$var[[idx]]$missval <- missval
 
-	if( nc$filename != "IN-MEMORY" )
+	if( nc$filename != "IN-MEMORY" ) {
+
+		if( nc$safemode )
+			nc$id = ncdf4_inner_open( nc )
+
 		ncatt_put( nc, varid, "missing_value", missval )
+
+		if( nc$safemode ) {
+			rv = .C("R_nc4_close", as.integer(nc$id), PACKAGE="ncdf4")
+			nc$id = -1	# invalidate this ID since it's not valid any more (duh)
+			}
+		}
 }
 
 #=========================================================================================================
@@ -1010,9 +1068,15 @@ ncvar_change_missval <- function( nc, varid, missval ) {
 # or
 #	nc <- ncdf.create( "test.nc", salin )
 #
+# If safemode is set, then that will determine whether or not safemode is off
+# according to its value. Otherwise, safemode will be set to TRUE iff we are on the
+# Windows-64 platform.
+#
 nc_create <- function( filename, vars, force_v4=FALSE, verbose=FALSE ) {
 
 	if( verbose ) print(paste('nc_create: entering, package version', nc_version() ))
+
+	safemode = FALSE
 
 	if( (! is.character(filename)) || (nchar(filename)<1))
 		stop("input filename must be a character string")
@@ -1148,6 +1212,27 @@ nc_create <- function( filename, vars, force_v4=FALSE, verbose=FALSE ) {
 	nc$dim    <- list()
 	nc$var    <- list()
 
+	#---------------------------------------------------------
+	# This must be ON for Windows-7 64-bit, off for everything
+	# else (as of Feb 2014)
+	#---------------------------------------------------------
+	am_windows = (length(grep( 'windows', .Platform$OS.type, ignore.case=TRUE)) != 0)
+	am_64      = (length(grep( 'x64',     .Platform$r_arch,  ignore.case=TRUE)) != 0)
+	nc$safemode <- (am_windows && am_64)
+nc$safemode = FALSE
+	#if( nc$safemode && (!is.na(safemode)) && (safemode == FALSE) ) {
+	#	print(paste("***************** W A R N I N G *****************************"))
+	#	print(paste("You are running on Windows-64 but have specified to force the"))
+	#	print(paste("safemode OFF. Safemode protects from KNOWN BUGS of the netcdf"))
+	#	print(paste("library on Windows-64. If you force safemode off YOU MUST NEVER"))
+	#	print(paste("HAVE MORE THAN ONE NETCDF FILE OPEN AT THE SAME TIME, or you"))
+	#	print(paste("may get errors of the type that the ncdf4 operators access the"))
+	#	print(paste("WRONG FILE. You are proceeding at your own risk!!"))
+	#	print(paste("***************************************************************"))
+	#	}
+	#if( !is.na(safemode))
+	#	nc$safemode = safemode
+
 	#--------------------------
 	# Create groups in the file
 	#--------------------------
@@ -1222,6 +1307,7 @@ nc_create <- function( filename, vars, force_v4=FALSE, verbose=FALSE ) {
 	# Exit define mode
 	#-----------------
 	if( verbose ) print("nc_create: exiting define mode")
+	#nc_enddef( nc, ignore_safemode=TRUE )
 	nc_enddef( nc )
 
 	#-----------------------------------------------------------------------
@@ -1236,6 +1322,14 @@ nc_create <- function( filename, vars, force_v4=FALSE, verbose=FALSE ) {
 	nc$format = ncdf4_format( nc$id )
 	if( verbose )
 		print(paste("file", filename, "is format", nc$format ))
+
+	#--------------------------------------------------------
+	# If we are running in safe mode, must close the file now
+	#--------------------------------------------------------
+	if( nc$safemode ) {
+		rv = .C("R_nc4_close", as.integer(nc$id), PACKAGE="ncdf4")
+		nc$id = -1	# invalidate this ID since it's not valid any more (duh)
+		}
 
 	return(nc)
 }
@@ -1270,9 +1364,16 @@ ncvar_add <- function( nc, v, verbose=FALSE, indefine=FALSE ) {
 	if( verbose )
 		print(paste("ncvar_add: varname to add=",v$name))
 
+	#----------------------------------------------------
+	# If we are running in safemode, must reopen the file
+	#----------------------------------------------------
+	if( (! indefine) && nc$safemode )
+		nc$id = ncdf4_inner_open( nc )
+
 	if( ! indefine ) {
 		if( verbose )
 			print(paste("ncvar_add: about to redef ncid=",nc$id))
+		#nc_redef( nc, ignore_safemode=TRUE )	# Go back into define mode
 		nc_redef( nc )	# Go back into define mode
 		}
 
@@ -1448,6 +1549,8 @@ ncvar_add <- function( nc, v, verbose=FALSE, indefine=FALSE ) {
 
 	nc$nvars   <- nc$nvars + 1
 	v$id       <- ncdf4_make_id( newvar$id, gidx, ncid2use, nc$nvars )
+	v$hasAddOffset <- FALSE
+	v$hasScaleFact <- FALSE
 	nc$var[[nc$nvars]] <- v
 
 	#----------------------------------------
@@ -1528,8 +1631,19 @@ ncvar_add <- function( nc, v, verbose=FALSE, indefine=FALSE ) {
 	if( (v$longname != v$name) && (nchar(v$longname)>0))
 		ncatt_put_inner( ncid2use, newvar$id, "long_name", v$longname, definemode=TRUE )
 
-	if( ! indefine )
+	if( ! indefine ) {
+		if( verbose ) print("ncvar_add: ending define mode")
+		#nc_enddef( nc, ignore_safemode=TRUE )	# Exit define mode
 		nc_enddef( nc )	# Exit define mode
+		}
+
+	#----------------------------------------------------------------
+	# If we are running in safe mode, close the file before returning
+	#----------------------------------------------------------------
+	if( (! indefine) && nc$safemode ) {
+		rv = .C("R_nc4_close", as.integer(nc$id), PACKAGE="ncdf4")
+		nc$id = -1	# invalidate this ID since it's not valid any more (duh)
+		}
 
 	if( verbose ) print(paste("nc_var_add: returning"))
 	return(nc)
@@ -1565,6 +1679,12 @@ ncatt_get <- function( nc, varid, attname=NA, verbose=FALSE ) {
 	if( class(nc) != "ncdf4" ) 
 		stop("Error, first passed argument must be an object of class ncdf4")
 
+	#----------------------------------------------------
+	# If we are running in safemode, must reopen the file
+	#----------------------------------------------------
+	if( nc$safemode )
+		nc$id = ncdf4_inner_open( nc )
+
 	#----------------------------------------------------------------------------
 	# Atts have a special case where an integer 0 means to access the global atts
 	#----------------------------------------------------------------------------
@@ -1594,6 +1714,14 @@ ncatt_get <- function( nc, varid, attname=NA, verbose=FALSE ) {
 			return( list() )
 		if( verbose ) print('ncatt_get: calling ncatt_get_inner for a non-global att')
 		return( ncatt_get_inner( idobj$group_id, idobj$id, attname=attname, verbose=verbose ))
+		}
+
+	#----------------------------------------------------------------
+	# If we are running in safe mode, close the file before returning
+	#----------------------------------------------------------------
+	if( nc$safemode ) {
+		rv = .C("R_nc4_close", as.integer(nc$id), PACKAGE="ncdf4")
+		nc$id = -1	# invalidate this ID since it's not valid any more (duh)
 		}
 }
 
@@ -1638,6 +1766,12 @@ ncatt_put <- function( nc, varid, attname, attval, prec=NA,
 	if( (nc$filename == "IN-MEMORY") || (! nc$writable))
 		stop("ncatt_put: the netcdf file has not been written to disk yet, or was not opened in write mode!")
 
+	#----------------------------------------------------
+	# If we are running in safemode, must reopen the file
+	#----------------------------------------------------
+	if( nc$safemode )
+		nc$id = ncdf4_inner_open( nc )
+
 	#----------------------------------------------------------------------------
 	# Atts have a special case where an integer 0 means to access the global atts
 	#----------------------------------------------------------------------------
@@ -1674,6 +1808,14 @@ ncatt_put <- function( nc, varid, attname, attval, prec=NA,
 		if( verbose ) print('ncatt_put: calling ncatt_put_inner')
 		ncatt_put_inner( idobj$group_id, idobj$id, attname, attval, prec=prec, verbose=verbose, definemode=definemode )
 		if( verbose ) print('ncatt_put: back from ncatt_put_inner')
+		}
+
+	#----------------------------------------------------------------
+	# If we are running in safe mode, close the file before returning
+	#----------------------------------------------------------------
+	if( nc$safemode ) {
+		rv = .C("R_nc4_close", as.integer(nc$id), PACKAGE="ncdf4")
+		nc$id = -1	# invalidate this ID since it's not valid any more (duh)
 		}
 
 	if( verbose ) print('ncatt_put: exiting')
@@ -1721,6 +1863,16 @@ ncvar_put <- function( nc, varid=NA, vals=NULL, start=NA, count=NA, verbose=FALS
 		if( verbose ) print(paste("ncvar_put: converting passed ncvar4/ncdim4 object to the name:", varid))
 		}
 
+	#----------------------------------------------------
+	# If we are running in safemode, must reopen the file
+	# and renew the varid
+	#----------------------------------------------------
+	if( nc$safemode ) {
+		if(verbose) print(paste('ncvar_put: file is in safe mode, so reopening file', nc$filename))
+		nc$id = ncdf4_inner_open( nc )
+		c_varid_gid = ncvar_id_hier( nc$id, varid )
+		}
+
 	if( is.null(vals))
 		stop("requires a vals argument to be set")
 
@@ -1740,6 +1892,10 @@ ncvar_put <- function( nc, varid=NA, vals=NULL, start=NA, count=NA, verbose=FALS
 	varid2use  = idobj$id
 	varidx2use = idobj$list_index	# this is the index into the nc$vars[[]] list that indictes this variable
 	isdimvar   = idobj$isdimvar
+	if( nc$safemode ) {
+		varid2use = c_varid_gid[1]
+		ncid2use  = c_varid_gid[2]
+		}
 
 	if( verbose ) 
 		print(paste('ncvar_put: writing to var (or dimvar) with id=',idobj$id, ' group_id=', idobj$group_id ))
@@ -1819,15 +1975,25 @@ ncvar_put <- function( nc, varid=NA, vals=NULL, start=NA, count=NA, verbose=FALS
 		mv <- default_missval_ncdf4()
 	else
 		mv <- nc$var[[ varidx2use ]]$missval 
-	if( ! is.null(mv))
-		vals <- ifelse( is.na(vals), mv, vals)
+
+	if( ! is.null(mv)) {
+		ierr = 0
+		if( storage.mode( vals ) == "double" ) {
+			rv <- .Call( "R_nc4_set_NA_to_val_double", 
+				vals, 
+				as.double(mv),
+				PACKAGE="ncdf4" )
+			}
+		else
+			vals <- ifelse( is.na(vals), mv, vals)
+		}
 
 	#---------------------------------
 	# Get the correct type of variable
 	#---------------------------------
 	precint <- ncvar_type( ncid2use, varid2use ) # 1=short, 2=int, 3=float, 4=double, 5=char, 6=byte, 7=ubyte, 8=ushort, 9=uint, 10=int64, 11=uint64, 12=string
 	if( verbose )
-		print(paste("Putting var of type",precint," (1=short, 2=int, 3=float, 4=double, 5=char, 6=byte, 7=ubyte, 8=ushort, 9=uint, 10=int64, 11=uint64, 12=string)"))
+		print(paste("ncvar_put: Putting var of type",precint," (1=short, 2=int, 3=float, 4=double, 5=char, 6=byte, 7=ubyte, 8=ushort, 9=uint, 10=int64, 11=uint64, 12=string)"))
 
 	#----------------------------------------------------------
 	# Sanity check to make sure we have at least as many values 
@@ -1860,18 +2026,17 @@ ncvar_put <- function( nc, varid=NA, vals=NULL, start=NA, count=NA, verbose=FALS
 		#--------------------------------------
 		# Short, Int, Byte, UByte, UShort, UInt 
 		#--------------------------------------
-		rv <- .C("R_nc4_put_vara_int", 
+		rv_error <- .Call("Rsx_nc4_put_vara_int", 
 			as.integer(ncid2use),
 			as.integer(varid2use),	
 			as.integer(c.start),	# Already switched to C convention...
 			as.integer(c.count),	# Already switched to C convention...
-			data=as.integer(vals),
-			error=as.integer(rv$error),
+			as.integer(vals),
 			PACKAGE="ncdf4")
-		if( rv$error != 0 ) 
-			stop("C function R_nc4_put_var_int returned error")
+		if( rv_error != 0 ) 
+			stop("C function Rsx_nc4_put_vara_int returned error")
 		if( verbose )
-			print(paste("C function R_nc4_put_var_int returned", rv$error))
+			print(paste("C function Rsx_nc4_put_vara_int returned", rv_error))
 		}
 
 	else if( (precint == 3) || (precint == 4) || (precint == 10) || (precint == 11)) {
@@ -1884,19 +2049,17 @@ ncvar_put <- function( nc, varid=NA, vals=NULL, start=NA, count=NA, verbose=FALS
 			print(paste("TRY to write this by converting from double precision floating point, but"))
 			print(paste("this could lose precision in your data!"))
 			}
-		rv <- .C("R_nc4_put_vara_double", 
+		rv_error <- .Call("Rsx_nc4_put_vara_double", 
 			as.integer(ncid2use),
 			as.integer(varid2use),	
 			as.integer(c.start),	# Already switched to C convention...
 			as.integer(c.count),	# Already switched to C convention...
 			data=as.double(vals),
-			error=as.integer(rv$error),
-			PACKAGE="ncdf4",
-			NAOK=TRUE )
-		if( rv$error != 0 ) 
-			stop("C function R_nc4_put_var_double returned error")
+			PACKAGE="ncdf4")
+		if( rv_error != 0 ) 
+			stop("C function Rsx_nc4_put_vara_double returned error")
 		if( verbose )
-			print(paste("C function R_nc4_put_var_double returned", rv$error))
+			print(paste("C function Rsx_nc4_put_vara_double returned", rv_error))
 		}
 
 	else if( precint == 5 ) {
@@ -1912,13 +2075,21 @@ ncvar_put <- function( nc, varid=NA, vals=NULL, start=NA, count=NA, verbose=FALS
 			error=as.integer(rv$error),
 			PACKAGE="ncdf4")
 		if( rv$error != 0 ) 
-			stop("C function R_nc4_put_var_double returned error")
+			stop("C function R_nc4_put_vara_text returned error")
 		if( verbose )
 			print(paste("C function R_nc4_put_var_text returned", rv$error))
 		}
 
 	else
 		stop(paste("Internal error in ncvar_put: unhandled variable type=",precint,". Types I know: 1=short 2=int 3=float 4=double 5=char"))
+
+	#----------------------------------------------------------------
+	# If we are running in safe mode, close the file before returning
+	#----------------------------------------------------------------
+	if( nc$safemode ) {
+		rv = .C("R_nc4_close", as.integer(nc$id), PACKAGE="ncdf4")
+		nc$id = -1	# invalidate this ID since it's not valid any more (duh)
+		}
 
 	if( verbose ) print('ncvar_put: exiting')
 }
@@ -1944,6 +2115,8 @@ ncvar_get <- function( nc, varid=NA, start=NA, count=NA, verbose=FALSE, signedby
 	if( class(nc) != "ncdf4" )
 		stop("first argument (nc) is not of class ncdf4!")
 
+	if( verbose ) print(paste("ncvar_get: entering for read from file", nc$filename))
+
 	if( (mode(varid) != 'character') && (class(varid) != 'ncvar4') && (class(varid) != 'ncdim4') && (! is.na(varid)))
 		stop(paste("Error: second argument to ncvar_get must be an object of type ncvar or ncdim",
 			"(both parts of the ncdf object returned by nc_open()), the character-string name of a variable or dimension",
@@ -1951,16 +2124,44 @@ ncvar_get <- function( nc, varid=NA, start=NA, count=NA, verbose=FALSE, signedby
 			"format and uses groups, then the fully qualified var name must be given, for",
 			"example, model1/run5/Temperature"))
 
+
+	#----------------------------------------------------
+	# If we are running in safemode, must reopen the file
+	#----------------------------------------------------
+	if( nc$safemode ) {
+		if( verbose ) print(paste("ncvar_get: safemode opening file"))
+		nc$id = ncdf4_inner_open( nc )
+		}
+
 	idobj = vobjtovarid4( nc, varid, verbose=verbose, allowdimvar=TRUE )
 
 	have_start = (length(start)>1) || ((length(start)==1) && (!is.na(start)))
 	have_count = (length(count)>1) || ((length(count)==1) && (!is.na(count)))
+
+	#-----------------------------------------------------------------
+	# If we have a start or count, they must not have any NA's in them
+	#-----------------------------------------------------------------
+	if( have_start ) {
+		for( i in 1:length(start)) {
+			if( is.na(start[i]))
+				stop(paste("Error, passed a 'start' argument that has NA values:", 
+					paste(start,collapse=' ') ))
+			}
+		}
+	if( have_count ) {
+		for( i in 1:length(count)) {
+			if( is.na(count[i]))
+				stop(paste("Error, passed a 'count' argument that has NA values:", 
+					paste(count,collapse=' ') ))
+			}
+		}
 
 	#---------------------------------------------------------------------
 	# Special check: if we are trying to get values from a dimvar, but the
 	# dim does not have a dimvar, then just return 1:length(dim)
 	#---------------------------------------------------------------------
 	if( idobj$isdimvar ) {
+		if( verbose ) print(paste("ncvar_get: passed object is a dimvar"))
 		if( idobj$id == -1 ) {	# this happens if dim name was passed, but it has no dimvar
 			#--------------------------------------------------------
 			# Here we return default integers for dims with no dimvar
@@ -1986,16 +2187,26 @@ ncvar_get <- function( nc, varid=NA, start=NA, count=NA, verbose=FALSE, signedby
 				start=start, count=count, verbose=verbose, signedbyte=signedbyte ))
 			}
 		}
+	else
+		{
+		if( verbose ) print(paste("ncvar_get: passed object is NOT a dimvar"))
+		}
 
 	#--------------------------------------------
 	# Get var's missval, addOffset, and scaleFact
 	#--------------------------------------------
+	if( verbose ) print(paste("ncvar_get: getting add offset and scale fact"))
 	if( idobj$list_index == -1 ) {
 		print("internal error: list_index for var is -1!")
 		print("Here is passed varid:")
 		print(varid)
 		}
 	li = idobj$list_index
+	if( verbose ) {
+		print(paste("ncvar_get: netcdf file index of var on list:", li))
+		print(paste("ncvar_get: here is var object:"))
+		print(nc$var[[li]])
+		}
 	if( nc$var[[li]]$hasAddOffset )
 		addOffset = nc$var[[li]]$addOffset
 	else
@@ -2005,10 +2216,34 @@ ncvar_get <- function( nc, varid=NA, start=NA, count=NA, verbose=FALSE, signedby
 	else
 		scaleFact = 1.0;
 
-	rv = ncvar_get_inner( idobj$group_id, idobj$id, nc$var[[li]]$missval,
+	ncid2use  = idobj$group_id
+	varid2use = idobj$id
+	if( verbose ) print(paste("ncvar_get: ncid2use=", ncid2use, "varid2use=", varid2use, "missval=", nc$var[[li]]$missval ))
+
+	#-----------------------------------------------------------
+	# If we are in safe mode, must renew our group id and var id
+	#-----------------------------------------------------------
+	if( nc$safemode ) {
+		if(verbose) print(paste('ncvar_get: file is in safe mode, so reopening file', nc$filename))
+		nc$id = ncdf4_inner_open( nc )
+		c_varid_gid = ncvar_id_hier( nc$id, nc$var[[li]]$name )
+		varid2use = c_varid_gid[1]
+		ncid2use  = c_varid_gid[2]
+		if(verbose) print(paste('ncvar_get: safe mode renewed ncid, varid2use:', ncid2use, varid2use ))
+		}
+
+	rv = ncvar_get_inner( ncid2use, varid2use, nc$var[[li]]$missval,
 			addOffset, scaleFact, start=start, count=count, 
 			verbose=verbose, signedbyte=signedbyte, 
 			collapse_degen=collapse_degen )
+
+	#----------------------------------------------------------------
+	# If we are running in safe mode, close the file before returning
+	#----------------------------------------------------------------
+	if( nc$safemode ) {
+		trv = .C("R_nc4_close", as.integer(nc$id), PACKAGE="ncdf4")
+		nc$id = -1	# invalidate this ID since it's not valid any more (duh)
+		}
 
 	return( rv )
 }
@@ -2016,12 +2251,23 @@ ncvar_get <- function( nc, varid=NA, start=NA, count=NA, verbose=FALSE, signedby
 #====================================================================================================
 nc_sync <- function( nc ) {
 
-	if( is.numeric(nc))
+	is_numeric = FALSE
+
+	if( is.numeric(nc)) {
 		ncid2use <- nc
+		is_numeric = TRUE
+		}
 	else if( class(nc) == 'ncdf4' )
 		ncid2use <- nc$id
 	else
 		stop("First argument must be a simple integer ID or an object of class ncdf4, as returned by nc_open() or nc_create()")
+
+	#--------------------------------------------------------
+	# If we are running in safemode, this call is meaningless
+	# since the file is closed every time anyway
+	#--------------------------------------------------------
+	if( (! is_numeric) && nc$safemode )
+		return()
 
 	rv = .C("R_nc4_sync", as.integer(ncid2use), PACKAGE="ncdf4")
 }
@@ -2029,12 +2275,30 @@ nc_sync <- function( nc ) {
 #===============================================================
 nc_redef <- function( nc ) {
 
-	if( is.numeric(nc))
+	ignore_safemode = TRUE
+
+	numeric_id = FALSE
+
+	if( is.numeric(nc)) {
+		numeric_id = TRUE
 		ncid2use <- nc
+		}
 	else if( class(nc) == 'ncdf4' )
 		ncid2use <- nc$id
 	else
 		stop("First argument must be a simple integer ID or an object of class ncdf4, as returned by nc_open() or nc_create()")
+
+	#--------------------------------------------------------
+	# If we are running in safemode, this call is meaningless
+	# since the file is closed every time anyway
+	#--------------------------------------------------------
+	if( (! numeric_id) && nc$safemode && (! ignore_safemode)) {
+		print('****** W A R N I N G *****')
+		print('You have called nc_redef on a file that is in safemode. In safemode, which is')
+		print('REQUIRED for Windows-64, the file is closed after every access. This is a workaround')
+		print('for a bug in the netcdf library under Windows-64. Therefore, redef has no meaning.')
+		return()
+		}
 
 	rv = .C("R_nc4_redef", as.integer(ncid2use), PACKAGE="ncdf4")
 }
@@ -2042,12 +2306,26 @@ nc_redef <- function( nc ) {
 #===============================================================
 nc_enddef <- function( nc ) {
 
-	if( is.numeric(nc))
+	ignore_safemode = TRUE
+
+	numeric_id = FALSE
+
+	if( is.numeric(nc)) {
 		ncid2use <- nc
+		numeric_id = TRUE
+		}
 	else if( class(nc) == 'ncdf4' )
 		ncid2use <- nc$id
 	else
 		stop("First argument must be a simple integer ID or an object of class ncdf4, as returned by nc_open() or nc_create()")
+
+	#--------------------------------------------------------------------------------
+	# Has no meaning if we are in safemode since the file is closed every time anyway
+	#--------------------------------------------------------------------------------
+	if( ! numeric_id ) {
+		if( nc$safemode && (! ignore_safemode))
+			return()
+		}
 
 	rv = .C("R_nc4_enddef", as.integer(ncid2use), PACKAGE="ncdf4")
 
@@ -2057,9 +2335,12 @@ nc_enddef <- function( nc ) {
 #===============================================================
 nc_close <- function( nc ) {
 
-	# Removed in version 1.5
-	#if( is.numeric(nc))
-	#	ncid2use <- nc
+	#--------------------------------------------------------------------------------
+	# Has no meaning if we are in safemode since the file is closed every time anyway
+	#--------------------------------------------------------------------------------
+	if( nc$safemode ) {
+		return()
+		}
 
 	if( class(nc) == 'ncdf4' )
 		ncid2use <- nc$id
@@ -2108,11 +2389,18 @@ ncvar_rename <- function( nc, old_varname, new_varname, verbose=FALSE ) {
 
 	def_mode <- FALSE
 	if( nchar(new_varname) > nchar(oldname)) {
+		#nc_redef( nc, ignore_safemode=TRUE )	# Go back into define mode
 		nc_redef( nc )	# Go back into define mode
 		def_mode <- TRUE
 		}
 
 	bn_new_varname = nc4_basename( new_varname )
+
+	#----------------------------------------------------
+	# If we are running in safemode, must reopen the file
+	#----------------------------------------------------
+	if( nc$safemode )
+		nc$id = ncdf4_inner_open( nc )
 
 	rv <- list()
 	rv$error <- -1
@@ -2125,14 +2413,24 @@ ncvar_rename <- function( nc, old_varname, new_varname, verbose=FALSE ) {
 	if( rv$error != 0 ) 
 		stop("error returned from C call")
 
-	if( def_mode )
+	if( def_mode ) {
+		#nc_enddef( nc, ignore_safemode=TRUE )
 		nc_enddef( nc )
+		}
 
 	#--------------------------------------------------------------
 	# Update our netcdf class structure to reflect the changed name
 	#--------------------------------------------------------------
 	idx <- vid$list_index
 	nc$var[[idx]]$name <- new_varname
+
+	#----------------------------------------------------------------
+	# If we are running in safe mode, close the file before returning
+	#----------------------------------------------------------------
+	if( nc$safemode ) {
+		rv = .C("R_nc4_close", as.integer(nc$id), PACKAGE="ncdf4")
+		nc$id = -1	# invalidate this ID since it's not valid any more (duh)
+		}
 
 	return(nc)
 }
