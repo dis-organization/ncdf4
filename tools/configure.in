@@ -62,17 +62,59 @@ NETCDF_CC_ARG1=$1
 set $CC
 R_CC_ARG1=$1
 if test x$NETCDF_CC_ARG1 != x$R_CC_ARG1; then
-	# Skip if one is gcc and the other is clang -- seems to bother some overly sensitive folks
-	gcc_and_clang=0
-	if test x$NETCDF_CC_ARG1 = xgcc -a x$R_CC_ARG1 = xclang; then
-		gcc_and_clang=1
+
+	#------------------------------------------------------------------------------
+	# By default, we emit a warning if the compilers of R and netcdf are different.
+	# This happens with some regularity to naive users.
+	#------------------------------------------------------------------------------
+	emit_warning=1
+
+	#-------------------------------------------------------------------------------------------------
+	# Skip warning if one is gcc and the other is clang -- seems to bother some overly sensitive folks
+	#-------------------------------------------------------------------------------------------------
+	NETCDF_IS_GCC=0
+	if echo "$NETCDF_CC_ARG1" | grep -q "gcc"; then
+		NETCDF_IS_GCC=1
 	fi
-	if test x$NETCDF_CC_ARG1 = xclang -a x$R_CC_ARG1 = xgcc; then
-		gcc_and_clang=1
+	NETCDF_IS_CLANG=0
+	if echo "$NETCDF_CC_ARG1" | grep -q "clang"; then
+		NETCDF_IS_CLANG=1
 	fi
 
-	if test $gcc_and_clang -eq 0; then
-		echo "netcdf cc arg1: $NETCDF_CC_ARG1  R cc arg1: $R_CC_ARG1"
+	R_IS_GCC=0
+	if echo "$R_CC_ARG1" | grep -q "gcc"; then
+		R_IS_GCC=1
+	fi
+	R_IS_CLANG=0
+	if echo "$R_CC_ARG1" | grep -q "clang"; then
+		R_IS_CLANG=1
+	fi
+
+	#-------------------------------------------------------------
+	# We don't bother emitting the warning if the two compilers in
+	# use are clang and gcc -- supposedly they are compatible
+	#-------------------------------------------------------------
+	if test $NETCDF_IS_CLANG -eq 1 -a $R_IS_GCC   -eq 1; then
+		emit_warning=0
+	fi
+	if test $NETCDF_IS_GCC   -eq 1 -a $R_IS_CLANG -eq 1; then
+		emit_warning=0
+	fi
+
+	#-----------------------------------------------------
+	# Both same, but different exact names of compilers...
+	# not sure if this actually guarantees success??
+	#-----------------------------------------------------
+	if test $NETCDF_IS_CLANG -eq 1 -a $R_IS_CLANG -eq 1; then
+		emit_warning=0
+	fi
+	if test $NETCDF_IS_GCC -eq 1 -a $R_IS_GCC -eq 1; then
+		emit_warning=0
+	fi
+
+	echo "netcdf cc arg1: $NETCDF_CC_ARG1  R cc arg1: $R_CC_ARG1 R_IS_GCC: $R_IS_GCC R_IS_CLANG: $R_IS_CLANG NETCDF_IS_GCC: $NETCDF_IS_GCC NETCDF_IS_CLANG: $NETCDF_IS_CLANG"
+
+	if test $emit_warning -eq 1; then
 		echo ">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>"
 		echo "WARNING: I *think* that different compilers are being used for R and the netcdf library!"
 		echo "If that is the case, then you may not be able to install the ncdf4 package successfully. If installation"

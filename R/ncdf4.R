@@ -129,7 +129,7 @@
 #======================================================================================================
 nc_version <- function() {
 	
-	return("ncdf4_1.12_20140613")
+	return("ncdf4_1.13_20140914")
 
 }
 
@@ -245,9 +245,8 @@ print.ncdf4 <- function( x, ... ) {
 	is_GMT       = ifelse( nc$is_GMT, ' (GMT format)', '' )
 	is_safemode  = ifelse( nc$safemode, ' (SAFE MODE ON)', '' )
 
-	print(paste("File ",nc$filename, " (", nc$format, ")", is_GMT, is_safemode, ":", sep=''))
-	print("")
-	print(paste("    ",nc$nvars,"variables (excluding dimension variables):"))
+	cat(paste0("File ", nc$filename, " (", nc$format, ")", is_GMT,  is_safemode, ":\n\n"))
+	cat("    ", nc$nvars, "variables (excluding dimension variables):\n")
 	if( nc$nvars > 0 ) {
 		for( i in 1:nc$nvars ) {
 			nd <- nc$var[[i]]$ndims
@@ -295,31 +294,30 @@ print.ncdf4 <- function( x, ... ) {
 				else
 					compress_tag = paste("(Compression: shuffle,level ", nc$var[[i]]$compression, ")", sep='' )
 				}
-			print(paste("        ", nc$var[[i]]$prec, ' ', nc$var[[i]]$name, dimstring, chunk_tag, "  ", compress_tag, sep='' ))
+			cat(paste0("        ", nc$var[[i]]$prec, ' ', nc$var[[i]]$name, dimstring, chunk_tag, "  ", compress_tag, '\n' ))
 			atts <- ncatt_get( nc, nc$var[[i]]$name )
 			natts <- length(atts)
 			if( natts > 0 ) {
 				nms <- names( atts )
 				for( ia in 1:natts ) 
-					print(paste("            ", nms[ia], ": ", atts[[ia]], sep='' ))
+					cat(paste0("            ", nms[ia], ": ", atts[[ia]], '\n' ))
 				}
 			}
 		}
 
-	print("")
-	print(paste("    ",nc$ndims,"dimensions:"))
+	cat("\n    ",nc$ndims,"dimensions:\n")
 	if( nc$ndims > 0 )
 		for( i in 1:nc$ndims ) {
 			tag <- ''
 			if( nc$dim[[i]]$unlim )
 				tag <- '   *** is unlimited ***'
-			print(paste("        ", nc$dim[[i]]$name, "  Size:", nc$dim[[i]]$len, tag, sep='' ))
+			cat(paste0("        ", nc$dim[[i]]$name, "  Size:", nc$dim[[i]]$len, tag, '\n' ))
 			atts <- ncatt_get( nc, nc$dim[[i]]$name )
 			natts <- length(atts)
 			if( natts > 0 ) {
 				nms <- names( atts )
 				for( ia in 1:natts ) 
-					print(paste("            ", nms[ia], ": ", atts[[ia]], sep='' ))
+					cat(paste0("            ", nms[ia], ": ", atts[[ia]], '\n' ))
 				}
 			}
 
@@ -329,11 +327,10 @@ print.ncdf4 <- function( x, ... ) {
 	atts <- ncatt_get( nc, 0 )
 	natts <- length(atts)
 	if( natts > 0 ) {
-		print('')
-		print(paste('    ', natts, ' global attributes:', sep=''))
+		cat(paste0('\n    ', natts, ' global attributes:\n'))
 		nms <- names( atts )
 		for( ia in 1:natts ) 
-			print(paste("        ", nms[ia], ": ", atts[[ia]], sep='' ))
+			cat(paste0("        ", nms[ia], ": ", atts[[ia]], '\n' ))
 		}
 }
 

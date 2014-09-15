@@ -1,6 +1,6 @@
 Package: ncdf4
-Version: 1.12
-Date: 2014-06-11
+Version: 1.13
+Date: 2014-09-15
 Title: Interface to Unidata netCDF (version 4 or earlier) format data
         files
 Author: David Pierce <dpierce@ucsd.edu>
@@ -23,7 +23,7 @@ Description: This package provides a high-level R interface to
 SystemRequirements: netcdf library version 4.1 or later
 License: GPL (>= 3)
 URL: http://dwpierce.com/software
-Packaged: 2014-06-16 18:07:58 UTC; pierce
+Packaged: 2014-09-15 19:35:18 UTC; pierce
 NeedsCompilation: yes
 Repository: CRAN
-Date/Publication: 2014-06-19 09:27:25
+Date/Publication: 2014-09-16 06:48:13

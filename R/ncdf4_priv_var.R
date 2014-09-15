@@ -691,10 +691,10 @@ ncvar_get_inner <- function( ncid, varid, missval, addOffset=0., scaleFact=1.0, 
 	if( verbose )
 		print(paste("ncvar_get_inner: getting var of type",tmp_typename[precint], 'id=', precint))
 
-	if( (precint == 1) || (precint == 2) || (precint == 6) || (precint == 7) || (precint == 8) || (precint == 9)) {
-		#--------------------------------------
-		# Short, Int, Byte, UByte, UShort, Uint
-		#--------------------------------------
+	if( (precint == 1) || (precint == 2) || (precint == 6) || (precint == 7) || (precint == 8)) {
+		#--------------------------------
+		# Short, Int, Byte, UByte, UShort
+		#--------------------------------
 		rv <- .Call("Rsx_nc4_get_vara_int", 
 			as.integer(ncid),
 			as.integer(varid),	
@@ -742,10 +742,12 @@ ncvar_get_inner <- function( ncid, varid, missval, addOffset=0., scaleFact=1.0, 
 		data = rv$data
 		}
 
-	else if( (precint == 10) || (precint == 11)) {
-		#--------------
-		# int64, uint64
-		#--------------
+	else if( (precint == 9) || (precint == 10) || (precint == 11)) {
+		#---------------------------------------------
+		# uint, int64, uint64
+		# Thanks to Tom Hilinski of Colorado State for
+		# fix to uint here
+		#---------------------------------------------
 		rv$data  <- double(totvarsize)
 		fixmiss = as.integer(0)
 		rv <- .Call("Rsx_nc4_get_vara_double", 

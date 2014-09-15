@@ -31,7 +31,7 @@ ncatt_get_n <- function( nc, varid ) {
 			## REMOVE unlimdimid=as.integer(rv$unlimdimid),
 			error=as.integer(rv$error),
 			PACKAGE="ncdf4")
-		if( rv$error != 0 ) 
+		if( rv$error != 0 )
 			stop(paste("R_nc4_inq returned error on file",nc$filename,"!"))
 		}
 	else
@@ -45,7 +45,7 @@ ncatt_get_n <- function( nc, varid ) {
 		rv$type    <- -1
 		rv$ndims   <- -1
 		rv$natts   <- -1
-		rv$precint <- -1 
+		rv$precint <- -1
 		rv$dimids  <- integer(ncvar_ndims( nc, varid ))
 		rv <- .C("R_nc4_inq_var",
 			as.integer(nc),
@@ -58,7 +58,7 @@ ncatt_get_n <- function( nc, varid ) {
 			precint=as.integer(rv$precint),
 			error=as.integer(rv$error),
 			PACKAGE="ncdf4")
-		if( rv$error != 0 ) 
+		if( rv$error != 0 )
 			stop(paste("R_nc4_inq_var returned error on file",nc$filename,"!"))
 		}
 
@@ -89,8 +89,8 @@ ncatt_put_inner = function( ncid, varid, attname, attval, prec=NA, verbose=FALSE
 	#-------------------------------------------------------------
 	# Note there are TWO types here.  One is the storage mode
 	# of the passed attval.  The netCDF routine to call is based
-	# on this stoarge mode. The second type is the type of 
-	# attribute to create.  This is passed as the 'prec' parameter 
+	# on this stoarge mode. The second type is the type of
+	# attribute to create.  This is passed as the 'prec' parameter
 	# to this netcDF routine.  If the passed prec is NA, then
 	# the storage mode of the attval is used as the type of the
 	# attribute to create.
@@ -100,7 +100,7 @@ ncatt_put_inner = function( ncid, varid, attname, attval, prec=NA, verbose=FALSE
 	# Get the netCDF function to call ... this always depends
 	# exclusively on the storage mode of the attval
 	#---------------------------------------------------------
-	if( storage.mode(attval) == "integer" ) 
+	if( storage.mode(attval) == "integer" )
 		funcname <- "R_nc4_put_att_int"
 	else if( storage.mode(attval) == "double" )
 		funcname <- "R_nc4_put_att_double"
@@ -118,7 +118,7 @@ ncatt_put_inner = function( ncid, varid, attname, attval, prec=NA, verbose=FALSE
 	# type, in general, but can be manually overridden.
 	#-------------------------------------------------------------
 	atttypeShort <- 1  # These MUST match the values in the C code
-	atttypeInt   <- 2 
+	atttypeInt   <- 2
 	atttypeFloat <- 3
 	atttypeDbl   <- 4
 	atttypeText  <- 5
@@ -130,12 +130,12 @@ ncatt_put_inner = function( ncid, varid, attname, attval, prec=NA, verbose=FALSE
 		#---------------------------------------------------------------------------
 		# The logic of this code is as follows. In general, given no additional
 		# information, it would be nice for the attribute to be the same type as
-		# the original variable IF POSSIBLE.  Now, if we are given a global 
+		# the original variable IF POSSIBLE.  Now, if we are given a global
 		# attribute, there is no "original variable", so we just take the precision
 		# (type) of the attribute as it is. If there IS a variable, we would like
 		# to make the att the same type if they are "compatible" types. For example,
-		# if the var is an int and the passed att is 52.0, it would be nice to 
-		# store it as an int rather than as a float. This code attempts to 
+		# if the var is an int and the passed att is 52.0, it would be nice to
+		# store it as an int rather than as a float. This code attempts to
 		# make that decision.  In general, this only applies if we are trying to
 		# cast near-integer floats or doubles to int in the case of an int var.
 		#---------------------------------------------------------------------------
@@ -158,7 +158,7 @@ ncatt_put_inner = function( ncid, varid, attname, attval, prec=NA, verbose=FALSE
 
 			if( var_prec == "int" ) {
 				att_is_int = (is.numeric(attval) && (floor(attval) == attval))
-				if( att_is_int ) 
+				if( att_is_int )
 					prec = 'int'
 				}
 			}
@@ -191,7 +191,7 @@ ncatt_put_inner = function( ncid, varid, attname, attval, prec=NA, verbose=FALSE
 	rv <- .C(funcname,
 		as.integer(ncid),
 		as.integer(varid),
-		as.character(attname), 
+		as.character(attname),
 		as.integer(typetocreate),
 		as.integer(length(attval)),
 		attval,
@@ -210,14 +210,14 @@ ncatt_put_inner = function( ncid, varid, attname, attval, prec=NA, verbose=FALSE
 
 #===================================================================================================
 # The difference between the "inner" version and the "regular" version is that the inner
-# version is passed only simple C-style integer ID's to operate on.  
+# version is passed only simple C-style integer ID's to operate on.
 # Inputs:
 #	ncid, varid: C-style (0-based counting) integers.  ncid must actually be a group
 #		ID if appropriate.
 #
 # SPECIAL NOTE:: Ordinarily, the C interface uses a varid == -1 to indicate global attributes.
 # while the R code visible to the user indicates global attributes using a varid == 0.  Since this
-# routine takes as its input the actual C-style numbers, the passed varid must equal -1 to access 
+# routine takes as its input the actual C-style numbers, the passed varid must equal -1 to access
 # global attributes.
 #
 ncatt_get_inner <- function( ncid, varid, attname=NA, verbose=FALSE ) {
@@ -229,9 +229,9 @@ ncatt_get_inner <- function( ncid, varid, attname=NA, verbose=FALSE ) {
 
 	if( ! is.numeric(varid))
 		stop(paste("ncatt_get_inner must be passed a simple C-style (0-based counting) integer as the first argument (ncid)"))
-	
+
 	retval <- list()
-	
+
 	#---------------------------------------------------------------------------
 	# If no attname is specified, return a list with attribute name/value pairs
 	#---------------------------------------------------------------------------
@@ -255,7 +255,7 @@ ncatt_get_inner <- function( ncid, varid, attname=NA, verbose=FALSE ) {
 			rv0 <- .C("R_nc4_inq_attname",
 				as.integer(ncid),
 				as.integer(varid),
-				as.integer(iatt),	
+				as.integer(iatt),
 				attname=as.character(rv0$attname),
 				error=as.integer(rv0$error),
 				PACKAGE="ncdf4")
@@ -269,7 +269,7 @@ ncatt_get_inner <- function( ncid, varid, attname=NA, verbose=FALSE ) {
 			#-------------------------------------------------------------------------------
 			if( verbose ) print(paste("ncatt_get_inner: recursively calling myself to value for attribute \"", rv0$attname, "\"" ))
 			tt <- ncatt_get_inner( ncid, varid, rv0$attname )
-			if( ! tt$hasatt ) 
+			if( ! tt$hasatt )
 				stop(paste("internal error: could not get attribute value for att named ", rv0$attname ))
 			retval[[rv0$attname]] <- tt$value
 			}
@@ -278,7 +278,7 @@ ncatt_get_inner <- function( ncid, varid, attname=NA, verbose=FALSE ) {
 		}
 
 	#----------------------------------------------------
-	# Find out if the attribute exists for this variable, 
+	# Find out if the attribute exists for this variable,
 	# and, if so, what type and length it is.
 	#----------------------------------------------------
 	rv0 <- list()
@@ -310,10 +310,10 @@ ncatt_get_inner <- function( ncid, varid, attname=NA, verbose=FALSE ) {
 	rv <- list()
 	rv$error     <- -1
 
-	if( (rv0$type == 1) || (rv0$type == 2) || (rv0$type == 6) || (rv0$type == 7) || (rv0$type == 8) || (rv0$type == 9)) {
-		#--------------------------------------
-		# Short, Int, Byte, UByte, UShort, UInt 
-		#--------------------------------------
+	if ( rv0$type %in% c( 1, 2, 6, 7, 8 ) ) {
+		#--------------------------------
+		# Short, Int, Byte, UByte, UShort
+		#--------------------------------
 		rv$attribute <- rep(as.integer(0),rv0$attlen)
 		if( verbose ) print(paste("ncatt_get_inner: calling R_nc4_get_att_int"))
 		rv <- .C("R_nc4_get_att_int",
@@ -324,15 +324,18 @@ ncatt_get_inner <- function( ncid, varid, attname=NA, verbose=FALSE ) {
 			error=as.integer(rv$error),
 			PACKAGE="ncdf4")
 		}
-	else if( (rv0$type == 3) || (rv0$type == 4) || (rv0$type == 10) || (rv0$type == 11)) {
+
+	else if ( rv0$type %in% c( 3, 4, 9, 10, 11 ) ) {
 		if( (rv0$type == 10) || (rv0$type == 11)) {
 			print(paste(">>>> WARNING <<<  attribute", attname, "is an 8-byte value, but R"))
 			print(paste("does not support this data type. I am returning a double precision"))
 			print(paste("floating point, but you must be aware that this could lose precision!"))
 			}
-		#------------------------------------------------
-		# Single, Double, 8-byte int, unsigned 8-byte int
-		#------------------------------------------------
+		#------------------------------------------------------
+		# Single, Double, 8-byte int, unsigned 8-byte int, UInt
+		# Thanks to Tom Hilinski at Colorado State for fix to
+		# uint in earlier versions.
+		#------------------------------------------------------
 		rv$attribute <- rep(0.0,rv0$attlen)
 		if( verbose ) print(paste("ncatt_get_inner: calling R_nc4_get_att_double"))
 		rv <- .C("R_nc4_get_att_double",
@@ -360,12 +363,12 @@ ncatt_get_inner <- function( ncid, varid, attname=NA, verbose=FALSE ) {
 	else if( rv0$type == 12 ) {
 		#----------------------------------------------------
 		# "String" ... strings are very different from "text"
-		# because the reported "attlen" will be the number 
+		# because the reported "attlen" will be the number
 		# of strings, rather than the length of any string.
 		#----------------------------------------------------
 		error = as.integer(0)
 		if( verbose ) print(paste("ncatt_get_inner: calling R_nc4_get_att_string"))
-		attribute <- .Call("R_nc4_get_att_string", 
+		attribute <- .Call("R_nc4_get_att_string",
 			as.integer(ncid),
 			as.integer(varid),
 			as.character(attname),
@@ -393,5 +396,3 @@ ncatt_get_inner <- function( ncid, varid, attname=NA, verbose=FALSE ) {
 	if( verbose ) print(paste("ncatt_get_inner: done for a single attribute, value= >",retval$value,"<"))
 	return(retval)
 }
-
-
