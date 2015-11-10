@@ -1,6 +1,6 @@
 AC_INIT(src/Makevars.in)
 
-echo "configure.in: starting"
+echo "configure.ac: starting"
 
 : ${R_HOME=`R RHOME`}
 if test -z "${R_HOME}"; then
@@ -61,7 +61,8 @@ set $NETCDF_CC
 NETCDF_CC_ARG1=$1
 set $CC
 R_CC_ARG1=$1
-if test x$NETCDF_CC_ARG1 != x$R_CC_ARG1; then
+TEST_EMIT_WARNING=0
+if test x$NETCDF_CC_ARG1 != x$R_CC_ARG1 -o $TEST_EMIT_WARNING -eq 1; then
 
 	#------------------------------------------------------------------------------
 	# By default, we emit a warning if the compilers of R and netcdf are different.
@@ -75,6 +76,11 @@ if test x$NETCDF_CC_ARG1 != x$R_CC_ARG1; then
 	NETCDF_IS_GCC=0
 	if echo "$NETCDF_CC_ARG1" | grep -q "gcc"; then
 		NETCDF_IS_GCC=1
+	else
+		AC_PROG_CC([$NETCDF_CC_ARG1])
+		if test "z$GCC" = zyes; then
+			NETCDF_IS_GCC=1
+		fi
 	fi
 	NETCDF_IS_CLANG=0
 	if echo "$NETCDF_CC_ARG1" | grep -q "clang"; then
@@ -84,6 +90,11 @@ if test x$NETCDF_CC_ARG1 != x$R_CC_ARG1; then
 	R_IS_GCC=0
 	if echo "$R_CC_ARG1" | grep -q "gcc"; then
 		R_IS_GCC=1
+	else
+		AC_PROG_CC([$R_CC_ARG1])
+		if test "z$GCC" = zyes; then
+			R_IS_GCC=1
+		fi
 	fi
 	R_IS_CLANG=0
 	if echo "$R_CC_ARG1" | grep -q "clang"; then
@@ -112,13 +123,16 @@ if test x$NETCDF_CC_ARG1 != x$R_CC_ARG1; then
 		emit_warning=0
 	fi
 
-	echo "netcdf cc arg1: $NETCDF_CC_ARG1  R cc arg1: $R_CC_ARG1 R_IS_GCC: $R_IS_GCC R_IS_CLANG: $R_IS_CLANG NETCDF_IS_GCC: $NETCDF_IS_GCC NETCDF_IS_CLANG: $NETCDF_IS_CLANG"
+	echo "netcdf cc arg1: $NETCDF_CC_ARG1  R cc arg1: $R_CC_ARG1 R_IS_GCC: $R_IS_GCC R_IS_CLANG: $R_IS_CLANG NETCDF_IS_GCC: $NETCDF_IS_GCC NETCDF_IS_CLANG: $NETCDF_IS_CLANG  emit_warning: $emit_warning"
 
-	if test $emit_warning -eq 1; then
-		echo ">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>"
-		echo "WARNING: I *think* that different compilers are being used for R and the netcdf library!"
-		echo "If that is the case, then you may not be able to install the ncdf4 package successfully. If installation"
-		echo "fails, you must create a new version of the netcdf library that was compiled with the same"
+	if test $emit_warning -eq 1 -o $TEST_EMIT_WARNING -eq 1; then
+		echo " "
+		echo ">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>"
+		echo "Dear ncdf4 user: The software configuration tool thinks that perhaps different compilers are being"
+		echo "used for R and the netcdf library. However, we all know that software configuration tools are"
+		echo "not that smart. If ncdf4 compiles fine for you, then please ignore this message. However, if"
+		echo "installation fails, it might be that you are using different compilers for R and the netcdf library."
+		echo "If so, then you must create a new version of the netcdf library that was compiled with the same"
 		echo "compiler that was used to install R (see information above). Then, try installing the ncdf4"
 		echo "package again using that new netcdf library. If necessary, you can specify the location of"
 		echo "the new nc-config (the one that uses the same compiler used by R) like this:"
@@ -126,7 +140,9 @@ if test x$NETCDF_CC_ARG1 != x$R_CC_ARG1; then
 		echo "R CMD INSTALL --configure-args=\"--with-nc-config=/home/joe/bin/nc-config\""
 		echo " "
 		echo "(obviously, put in the correct path to YOUR nc-config, don't just use my example location!)"
-		echo "<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<"
+		echo "<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<"
+		echo " "
 	fi
+
 fi
 

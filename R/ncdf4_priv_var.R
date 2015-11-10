@@ -604,9 +604,12 @@ ncvar_get_inner <- function( ncid, varid, missval, addOffset=0., scaleFact=1.0, 
 
 		stop("Error, second arg passed to ncvar_get_inner (varid) must be a simple C-style integer that is passed directly to the C api")
 
-	if( verbose ) 
+	if( verbose ) {
 		print(paste("ncvar_get_inner: entering with (C-STYLE INTEGER ONLY) ncid=", ncid, 
 			"varid=", varid ))
+		print(paste("ncvar_get_inner: following line is collapse_degen:"))
+		print(collapse_degen)
+		}
 
 	tmp_typename = c('short', 'int', 'float', 'double', 'char', 'byte' )
 
