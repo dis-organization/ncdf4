@@ -5,6 +5,7 @@
 #include <stdlib.h>
 
 #include <Rdefines.h>
+#include <R_ext/Rdynload.h>
 
 /* These same values are hard-coded into the R source. Don't change them! 
  * Note that they are not the same as values defined in the netcdf
@@ -26,6 +27,190 @@
 #define R_NC_TYPE_STRING	12
 
 void R_nc4_inq_varid_hier( int *ncid, char **varname, int *returned_grpid, int *returned_varid );
+int  R_nc4_nctype_to_Rtypecode( nc_type nct );
+void R_nc4_varsize( int *ncid, int *varid, int *ndims, int *varsize, int *retval );
+void R_nc4_inq_varunlim( int *ncid, int *varid, int *isunlim, int *retval );
+void R_nc4_inq_var( int *ncid, int *varid, char **varname, int *type, int *ndims, int *dimids, int *natts, int *precint, int *retval );
+void R_nc4_inq_vartype( int *ncid, int *varid, int *precint, int *retval );
+void R_nc4_inq_varname( int *ncid, int *varid, char **varname, int *retval );
+void R_nc4_inq_varndims( int *ncid, int *varid, int *ndims, int *retval );
+void R_nc4_inq_dimlen( int *ncid, char **dimname, int *dimlen );
+void R_nc4_inq_dimid( int *ncid, char **dimname, int *dimid );
+void R_nc4_inq_varid( int *ncid, char **varname, int *varid );
+void R_nc4_inq_unlimdim( int *ncid, int *unlimdimid, int *retval );
+void R_nc4_inq_dimids( int *ncid, int *dimids, int *retval );
+void R_nc4_inq_dim( int *ncid, int *dimid, char **dimname, int *dimlen, int *unlim, int *retval );
+void R_nc4_inq( int *ncid, int *ndims, int *nvars, int *natts, int *retval );
+void R_nc4_open( char **filename, int *cmode, int *ncid, int *retval );
+void R_nc4_create( char **filename, int *cmode, int *ncid, int *retval );
+nc_type R_nc4_ttc_to_nctype( int type_to_create );
+
+void R_nc4_put_att_logical( int *ncid, int *varid, char **attname, int *type_to_create, int *natts, int    *attribute, int *retval );
+void R_nc4_put_att_int    ( int *ncid, int *varid, char **attname, int *type_to_create, int *natts, int    *attribute, int *retval );
+void R_nc4_put_att_double ( int *ncid, int *varid, char **attname, int *type_to_create, int *natts, double *attribute, int *retval );
+void R_nc4_put_att_text   ( int *ncid, int *varid, char **attname, int *type_to_create, int *natts, char  **attribute, int *retval );
+
+void R_nc4_inq_att       ( int *ncid, int *varid, char **attname, int *type, int *attlen, int *retval );
+
+void R_nc4_get_att_int   ( int *ncid, int *varid, char **attname, int    *attribute, int *retval );
+void R_nc4_get_att_double( int *ncid, int *varid, char **attname, double *attribute, int *retval );
+void R_nc4_get_att_text  ( int *ncid, int *varid, char **attname, char  **attribute, int *retval );
+
+void R_nc4_def_var_byte  ( int *ncid, char **varname, int *ndims, int *dimids, int *varid, int *retval );
+void R_nc4_def_var_int   ( int *ncid, char **varname, int *ndims, int *dimids, int *varid, int *retval );
+void R_nc4_def_var_short ( int *ncid, char **varname, int *ndims, int *dimids, int *varid, int *retval );
+void R_nc4_def_var_float ( int *ncid, char **varname, int *ndims, int *dimids, int *varid, int *retval );
+void R_nc4_def_var_double( int *ncid, char **varname, int *ndims, int *dimids, int *varid, int *retval );
+void R_nc4_def_var_char  ( int *ncid, char **varname, int *ndims, int *dimids, int *varid, int *retval );
+
+void R_nc4_def_dim( int *ncid, char **dimname, int *size, int *dimid, int *retval );
+void R_nc4_redef( int *ncid );
+void R_nc4_rename_var( int *ncid, int *varid, char **newname, int *retval );
+void R_nc4_inq_attname( int *ncid, int *varid, int *attnum, char **attname, int *retval );
+
+void R_nc4_def_var_chunking( int *root_id, int *varid, int *ndims, int *storage, int *chunksizesp, int *ierr );
+void R_nc4_inq_var_chunking( int *root_id, int *varid, int *ndims, int *storage, int *chunksizesp, int *ierr );
+void R_nc4_inq_var_deflate( int *root_id, int *varid, int *shuffle, int *deflate, int *deflate_level, int *ierr );
+void R_nc4_def_var_deflate( int *root_id, int *varid, int *shuffle, int *deflate, int *deflate_level, int *ierr );
+
+void R_nc4_inq_ngroups( int *root_id, int *ngroups, int *ierr );
+void R_nc4_inq_groupids( int *root_id, int *gids, int *ierr );
+int R_nc4_util_nslashes( char *s, int *idx_first_slash );
+void R_nc4_inq_varid_hier_inner( int *ncid, char *varname, int *returned_grpid, int *returned_varid );
+void R_nc4_inq_varid_hier( int *ncid, char **varname, int *returned_grpid, int *returned_varid );
+void R_nc4_get_vara_text( int *ncid, int *varid, int *start, int *count, char **tempstore, char **data, int *retval );
+void R_nc4_put_vara_text( int *ncid, int *varid, int *start, int *count, char **data, int *retval );
+
+void R_nc4_enddef( int *ncid );
+void R_nc4_sync  ( int *ncid );
+void R_nc4_close ( int *ncid );
+
+void R_nc4_def_grp( int *parent_ncid, char **grpname, int *new_ncid, int *retval );
+int R_ncu4_varid_onlyvar( int ncid );
+void R_ncu4_calc_start_count( int ncid, int varid, int *start_arg, int len_start, 
+	int *count_arg, int len_count, size_t *varsize,
+	int ndims, size_t *start, size_t *count );
+int R_ncu4_get_varsize( int ncid, int varid, int ndims, size_t *varsize );
+int R_ncu4_isdimvar( int ncid, char *name );
+
+SEXP Rsx_nc4_get_vara_double( SEXP sx_ncid, SEXP sx_varid, SEXP sx_start, SEXP sx_count, SEXP sx_fixmiss, SEXP sx_imvstate, SEXP sx_missval );
+SEXP Rsx_nc4_get_vara_int   ( SEXP sx_ncid, SEXP sx_varid, SEXP sx_start, SEXP sx_count, SEXP sx_byte_style );
+SEXP R_nc4_get_att_string   ( SEXP sx_ncid, SEXP sx_varid, SEXP sx_attname, SEXP sx_attlen, SEXP sx_ierr_returned );
+SEXP Rsx_nc4_put_vara_double( SEXP sx_ncid, SEXP sx_varid, SEXP sx_start, SEXP sx_count, SEXP sx_data );
+SEXP Rsx_nc4_put_vara_int   ( SEXP sx_ncid, SEXP sx_varid, SEXP sx_start, SEXP sx_count, SEXP sx_data );
+SEXP R_nc4_blankstring(SEXP size);
+SEXP R_nc4_grpname(SEXP sx_root_id, SEXP sx_ierr_retval);
+SEXP R_nc4_inq_format(SEXP sx_root_id, SEXP sx_ierr_retval);
+SEXP R_nc4_set_NA_to_val_double(SEXP sx_dat, SEXP sx_val );
+
+SEXP R_nc4_get_vara_charvarid( SEXP sx_nc, SEXP sx_varid, SEXP sx_start, SEXP sx_count ) ;
+SEXP R_nc4_get_vara_numvarid( SEXP sx_nc, SEXP sx_varid, SEXP sx_start, SEXP sx_count );
+SEXP R_ncu4_getListElement(SEXP list, char *str);
+SEXP R_nc4_get_vara_string( SEXP sx_nc, SEXP sx_varid, SEXP sx_start, SEXP sx_count );
+
+/* For C calls that don't use SEXP type args */
+static const
+R_CMethodDef cMethods[] = {
+	{"R_nc4_nctype_to_Rtypecode", 	(DL_FUNC) &R_nc4_nctype_to_Rtypecode, 	1},
+	{"R_nc4_varsize", 		(DL_FUNC) &R_nc4_varsize, 		5},
+	{"R_nc4_inq_varunlim", 		(DL_FUNC) &R_nc4_inq_varunlim, 		4},
+	{"R_nc4_inq_var", 		(DL_FUNC) &R_nc4_inq_var, 		9},
+	{"R_nc4_inq_vartype", 		(DL_FUNC) &R_nc4_inq_vartype, 		4},
+	{"R_nc4_inq_varname", 		(DL_FUNC) &R_nc4_inq_varname, 		4},
+	{"R_nc4_inq_varndims", 		(DL_FUNC) &R_nc4_inq_varndims, 		4},
+	{"R_nc4_inq_dimlen", 		(DL_FUNC) &R_nc4_inq_dimlen, 		3},
+	{"R_nc4_inq_dimid", 		(DL_FUNC) &R_nc4_inq_dimid, 		3},
+	{"R_nc4_inq_varid", 		(DL_FUNC) &R_nc4_inq_varid, 		3},
+	{"R_nc4_inq_unlimdim", 		(DL_FUNC) &R_nc4_inq_unlimdim, 		3},
+	{"R_nc4_inq_dimids", 		(DL_FUNC) &R_nc4_inq_dimids, 		3},
+	{"R_nc4_inq_dim", 		(DL_FUNC) &R_nc4_inq_dim, 		6},
+	{"R_nc4_inq", 			(DL_FUNC) &R_nc4_inq, 			5},
+
+	{"R_nc4_open", 			(DL_FUNC) &R_nc4_open, 			4},
+	{"R_nc4_create",              	(DL_FUNC) &R_nc4_create,              	4},
+
+	{"R_nc4_ttc_to_nctype",         (DL_FUNC) &R_nc4_ttc_to_nctype, 	1},
+
+	{"R_nc4_put_att_logical",	(DL_FUNC) &R_nc4_put_att_logical, 	7},
+	{"R_nc4_put_att_int",		(DL_FUNC) &R_nc4_put_att_int, 		7},
+	{"R_nc4_put_att_double",	(DL_FUNC) &R_nc4_put_att_double, 	7},
+	{"R_nc4_put_att_text",		(DL_FUNC) &R_nc4_put_att_text, 		7},
+
+	{"R_nc4_inq_att",		(DL_FUNC) &R_nc4_inq_att, 		6},
+
+	{"R_nc4_get_att_int",		(DL_FUNC) &R_nc4_get_att_int, 		5},
+	{"R_nc4_get_att_double",	(DL_FUNC) &R_nc4_get_att_double, 	5},
+	{"R_nc4_get_att_text",		(DL_FUNC) &R_nc4_get_att_text, 		5},
+
+	{"R_nc4_def_var_byte",		(DL_FUNC) &R_nc4_def_var_byte, 		6},
+	{"R_nc4_def_var_int",		(DL_FUNC) &R_nc4_def_var_int, 		6},
+	{"R_nc4_def_var_short",		(DL_FUNC) &R_nc4_def_var_short,		6},
+	{"R_nc4_def_var_float",		(DL_FUNC) &R_nc4_def_var_float,		6},
+	{"R_nc4_def_var_double",	(DL_FUNC) &R_nc4_def_var_double,	6},
+	{"R_nc4_def_var_char",		(DL_FUNC) &R_nc4_def_var_char, 		6},
+
+	{"R_nc4_def_dim",             	(DL_FUNC) &R_nc4_def_dim,             	5},
+	{"R_nc4_redef",             	(DL_FUNC) &R_nc4_redef,             	1},
+	{"R_nc4_rename_var",           	(DL_FUNC) &R_nc4_rename_var,           	4},
+	{"R_nc4_inq_attname",          	(DL_FUNC) &R_nc4_inq_attname,          	5},
+
+	{"R_nc4_def_var_chunking", 	(DL_FUNC) &R_nc4_def_var_chunking,    	6},
+	{"R_nc4_inq_var_chunking", 	(DL_FUNC) &R_nc4_inq_var_chunking,    	6},
+	{"R_nc4_def_var_deflate", 	(DL_FUNC) &R_nc4_def_var_deflate,    	6},
+	{"R_nc4_inq_var_deflate", 	(DL_FUNC) &R_nc4_inq_var_deflate,    	6},
+
+	{"R_nc4_inq_ngroups", 		(DL_FUNC) &R_nc4_inq_ngroups,    	3},
+	{"R_nc4_inq_groupids", 		(DL_FUNC) &R_nc4_inq_groupids,    	3},
+	{"R_nc4_util_nslashes", 	(DL_FUNC) &R_nc4_util_nslashes,    	2},
+	{"R_nc4_inq_varid_hier_inner", 	(DL_FUNC) &R_nc4_inq_varid_hier_inner,  4},
+	{"R_nc4_inq_varid_hier", 	(DL_FUNC) &R_nc4_inq_varid_hier,  	4},
+
+	{"R_nc4_get_vara_text", 	(DL_FUNC) &R_nc4_get_vara_text,  	7},
+	{"R_nc4_put_vara_text", 	(DL_FUNC) &R_nc4_put_vara_text,  	6},
+
+	{"R_nc4_enddef", 		(DL_FUNC) &R_nc4_enddef,  		1},
+	{"R_nc4_sync", 			(DL_FUNC) &R_nc4_sync,  		1},
+	{"R_nc4_close", 		(DL_FUNC) &R_nc4_close,  		1},
+
+	{"R_nc4_def_grp", 		(DL_FUNC) &R_nc4_def_grp,  		4}, 
+	{"R_ncu4_varid_onlyvar", 	(DL_FUNC) &R_ncu4_varid_onlyvar, 	1}, 
+	{"R_ncu4_calc_start_count", 	(DL_FUNC) &R_ncu4_calc_start_count, 	10}, 
+	{"R_ncu4_get_varsize", 		(DL_FUNC) &R_ncu4_get_varsize, 		4}, 
+	{"R_ncu4_isdimvar", 		(DL_FUNC) &R_ncu4_isdimvar, 		2}, 
+
+	NULL 
+};
+
+/* For C calls that use SEXP type args */
+static const
+R_CallMethodDef callMethods[] = {
+	{"Rsx_nc4_get_vara_double", 	(DL_FUNC) &Rsx_nc4_get_vara_double,  	7},
+	{"Rsx_nc4_get_vara_int", 	(DL_FUNC) &Rsx_nc4_get_vara_int,  	5},
+	{"R_nc4_get_att_string", 	(DL_FUNC) &R_nc4_get_att_string,  	5},
+	{"Rsx_nc4_put_vara_double", 	(DL_FUNC) &Rsx_nc4_put_vara_double,  	5},
+	{"Rsx_nc4_put_vara_int", 	(DL_FUNC) &Rsx_nc4_put_vara_int,  	5},
+	{"R_nc4_blankstring", 		(DL_FUNC) &R_nc4_blankstring,  		1},
+	{"R_nc4_grpname", 		(DL_FUNC) &R_nc4_grpname,  		2},
+	{"R_nc4_inq_format", 		(DL_FUNC) &R_nc4_inq_format,  		2},
+	{"R_nc4_set_NA_to_val_double", 	(DL_FUNC) &R_nc4_set_NA_to_val_double, 	2},
+
+	{"R_nc4_get_vara_charvarid", 	(DL_FUNC) &R_nc4_get_vara_charvarid, 	4},
+	{"R_nc4_get_vara_numvarid", 	(DL_FUNC) &R_nc4_get_vara_numvarid, 	4},
+	{"R_ncu4_getListElement", 	(DL_FUNC) &R_ncu4_getListElement, 	2},
+	{"R_nc4_get_vara_string", 	(DL_FUNC) &R_nc4_get_vara_string, 	4},
+
+	NULL
+};
+
+/*********************************************************************
+ * Register our extnal routines for R
+*/
+void R_init_ncdf4( DllInfo *info ) 
+{
+	R_registerRoutines( info, cMethods, callMethods, NULL, NULL );
+
+	R_useDynamicSymbols( info, FALSE );
+}
 
 /*********************************************************************
  * Converts from type "nc_type" to an integer as defined in the beginning 
@@ -1828,5 +2013,612 @@ void R_nc4_inq_varid_hier( int *ncid, char **varname, int *returned_grpid, int *
 {
 /* Rprintf("R_nc4_inq_varid_hier: entering for var >%s<\n", varname[0] ); */
 	R_nc4_inq_varid_hier_inner( ncid, varname[0], returned_grpid, returned_varid );
+}
+
+/*********************************************************************/
+void R_nc4_enddef( int *ncid )
+{
+	int	err;
+	err = nc_enddef(*ncid);
+	if( err != NC_NOERR ) 
+		Rprintf( "Error in R_nc4_enddef: %s\n", 
+			nc_strerror(err) );
+}
+
+/*********************************************************************/
+void R_nc4_sync( int *ncid )
+{
+	int	err;
+	err = nc_sync(*ncid);
+	if( err != NC_NOERR ) 
+		Rprintf( "Error in R_nc4_sync: %s\n", 
+			nc_strerror(err) );
+}
+
+/*********************************************************************/
+void R_nc4_close( int *ncid )
+{
+	int	err;
+	err = nc_close(*ncid);
+	if( err != NC_NOERR ) 
+		Rprintf( "Error in R_nc4_close: %s\n", 
+			nc_strerror(err) );
+}
+
+/*********************************************************************/
+void R_nc4_def_grp( int *parent_ncid, char **grpname, int *new_ncid, int *retval )
+{
+	*retval = nc_def_grp(*parent_ncid, grpname[0], new_ncid );
+	if( *retval != NC_NOERR ) {
+		Rprintf( "Error in R_nc4_def_grp: %s\n", 
+			nc_strerror(*retval) );
+		Rprintf( "Name of group that the error occurred on: \"%s\"\n", 
+			grpname[0] );
+		}
+}
+
+/*========================================================================================================*/
+/*========================================================================================================*/
+/*========================================================================================================*/
+
+
+/*********************************************************************************
+ * Return the varid of the only var in the file, or -1 if more than one.
+ */
+int R_ncu4_varid_onlyvar( int ncid )
+{
+	int	ierr, nvars, varid, i, dimid;
+	char	varname[MAX_NC_NAME];
+
+	varid = -1;
+	ierr = nc_inq_nvars( ncid, &nvars );
+	if( ierr != NC_NOERR )
+		error("Error reading from netcdf file!");
+
+	for( i=0; i<nvars; i++ ) {
+		ierr = nc_inq_varname( ncid, i, varname );
+		if( ierr != NC_NOERR )
+			error("Error reading from netcdf file!");
+		ierr = nc_inq_dimid( ncid, varname, &dimid );
+		if( ierr != NC_NOERR ) {
+			/* Did NOT find this var as a dim, means it is NOT a dimvar */
+			if( varid != -1 )
+				/* More than one non-dimvar dim in this file */
+				return( -1 );
+			varid = i;
+			}
+		}
+	return( varid );
+}
+
+/*================================================================================================================
+ * Given as inputs start_arg and count_arg (which can be -1's for example) this calculates
+ * the actual start and count to use, and returns them.
+ */
+void R_ncu4_calc_start_count( int ncid, int varid, int *start_arg, int len_start, 
+	int *count_arg, int len_count, size_t *varsize,
+	int ndims, size_t *start, size_t *count )
+{
+	int i, j, tmp[MAX_NC_DIMS], n_nondegen_dims;	
+
+	/*
+	Rprintf( "Passed count: [" );
+	for( i=0; i<len_count; i++ ) {
+		Rprintf( "%d", count_arg[i] );
+		if( i < (len_count-1))
+			Rprintf( "," );
+		}
+	Rprintf( "]\n" );
+	*/
+
+	/*---------------------------------------------------------------- 
+	 * If start is a single '-1', then figure out actual start to use.
+	 * Note: 'start_arg' is what was passed to this routine.
+	 * 'start' is the actual start to use, which may be somewhat 
+	 * different.
+	 *---------------------------------------------------------------*/
+	if( (len_start == 1) && (start_arg[0] == -1)) {
+		/*----------------------------------------------------
+		 * User did not specify a start arg -- just start at 0
+		 *---------------------------------------------------*/
+		for( i=0; i<ndims; i++ )
+			start[i] = 0L;
+		}
+	else
+		{
+		/*-------------------------------------------------------
+		 * User specified start ... switch from R to C convention.
+		 * R convention is (xyzt) order with 1-based counting. C
+		 * convention is (tzyx) order with 0-based counting.
+		 *------------------------------------------------------*/
+		for( i=0; i<len_start; i++ )
+			tmp[i] = start_arg[len_start-i-1] - 1;
+		for( i=0; i<len_start; i++ )
+			start_arg[i] = tmp[i];
+
+		/*-------------------------------------------
+		 * Make sure passed start arg has enough dims 
+		 *------------------------------------------*/
+		if( len_start != ndims ) {
+			/*-------------------------------------------------------------- 
+			 * Well, allow 1 special case ... user can specify values just
+			 * for non-degenerate dims (ones that have length>1).  To figure
+			 * this out we need to get the vector of dimlengths for this var.
+			 *-------------------------------------------------------------*/
+			if( R_ncu4_get_varsize( ncid, varid, ndims, varsize ) == -1 )
+				error("read of netcdf file failed when getting variable size");
+			n_nondegen_dims = 0;
+			for( i=0; i<ndims; i++ )
+				if( varsize[i] > 1 )
+					n_nondegen_dims++;
+			if( len_start != n_nondegen_dims ) {
+				error( "Error, passed argument 'start' has length %d, but must either have a length equal to the number of dimensions (%d) OR the number of non-degenerate dimensions (%d)\n",
+					len_start, ndims, n_nondegen_dims );
+				}
+			/*-----------------------------------------------------------------
+			 * If we get here, user has specified non-degen dimensions only ... 
+			 * translate this to a start string we can use.
+			 *----------------------------------------------------------------*/
+			j = 0;
+			for( i=0; i<ndims; i++ ) {
+				if( varsize[i] == 1 )
+					start[i] = 0L;
+				else
+					start[i] = start_arg[j++];
+				}
+			}
+		else
+			{
+			/*---------------------------------------------------
+			 * user specified enough dims ... just copy them over
+			 *--------------------------------------------------*/
+			for( i=0; i<ndims; i++ )
+				start[i] = (size_t)start_arg[i];
+			}
+		}
+
+	/*---------------------------------------------------------------- 
+	 * If count is a single '-1', then figure out actual count to use.
+	 * Note: 'count_arg' is what was passed to this routine.
+	 * 'count' is the actual count to use, which may be somewhat 
+	 * different.
+	 *---------------------------------------------------------------*/
+	if( (len_count == 1) && (count_arg[0] == -1)) {
+		/*----------------------------------------------------
+		 * User did not specify a count arg -- do entire var, 
+		 * taking start into account.
+		 *---------------------------------------------------*/
+		for( i=0; i<ndims; i++ )
+			count[i] = varsize[i] - start[i];
+		}
+	else
+		{
+		/*-------------------------------------------------------
+		 * User specified count ... switch from R to C convention.
+		 * R convention is (xyzt) order, C convention is (tzyx).
+		 *------------------------------------------------------*/
+		for( i=0; i<len_count; i++ )
+			tmp[i] = count_arg[len_count-i-1];
+		for( i=0; i<len_count; i++ )
+			count_arg[i] = tmp[i];
+
+		/*-------------------------------------------
+		 * Make sure passed count arg has enough dims 
+		 *------------------------------------------*/
+		if( len_count != ndims ) {
+			/*-------------------------------------------------------------- 
+			 * Well, allow 1 special case ... user can specify values just
+			 * for non-degenerate dims (ones that have length>1).  To figure
+			 * this out we need to get the vector of dimlengths for this var.
+			 *-------------------------------------------------------------*/
+			n_nondegen_dims = 0;
+			for( i=0; i<ndims; i++ )
+				if( varsize[i] > 1 )
+					n_nondegen_dims++;
+			if( len_count != n_nondegen_dims ) {
+				error( "Error, passed argument 'count' has length %d, but must either have a length equal to the number of dimensions (%d) OR the number of non-degenerate dimensions (%d)\n",
+					len_count, ndims, n_nondegen_dims );
+				}
+			/*-----------------------------------------------------------------
+			 * If we get here, user has specified non-degen dimensions only ... 
+			 * translate this to a count string we can use.
+			 *----------------------------------------------------------------*/
+			j = 0;
+			for( i=0; i<ndims; i++ ) {
+				if( varsize[i] == 1 )
+					count[i] = 1L;
+				else
+					count[i] = count_arg[j++];
+				}
+			}
+		else
+			{
+			/*---------------------------------------------------
+			 * user specified enough dims ... just copy them over
+			 *--------------------------------------------------*/
+			for( i=0; i<ndims; i++ )
+				if( count_arg[i] == -1 )
+					count[i] = varsize[i] - start[i];
+				else
+					count[i] = (size_t)count_arg[i];
+			}
+		}
+
+	/*
+	Rprintf( "Final count to use: [" );
+	for( i=0; i<len_count; i++ ) {
+		Rprintf( "%ld", count[i] );
+		if( i < (len_count-1))
+			Rprintf( "," );
+		}
+	Rprintf( "]\n" );
+	*/
+}
+
+
+/***************************************************************************************
+ * Given a characer variable name, this reads the data for that var from the file.
+ * Return value: a list with two elements:
+ *	[[1]]: an integer error code. '0' means no error.
+ *	[[2]]: a real or integer array that contains the desired data.
+ *
+ */
+SEXP R_nc4_get_vara_charvarid( SEXP sx_nc, SEXP sx_varid, SEXP sx_start, SEXP sx_count ) 
+{
+	char	errmess[1024];
+	int	varid, ierr, ncid;
+	SEXP	retval, sx_numvarid;
+	const char *varname = CHAR(STRING_ELT(sx_varid,0)); 
+
+	ncid    = INTEGER(R_ncu4_getListElement( sx_nc, "id" ))[0];
+
+	ierr = nc_inq_varid( ncid, varname, &varid );
+	if( ierr != NC_NOERR ) {
+		sprintf( errmess, "the passed variable name [%s] does not exist in the file!",
+			varname );
+		error( errmess );
+		}
+
+	PROTECT( sx_numvarid = allocVector( INTSXP, 1 ));
+	INTEGER(sx_numvarid)[0] = varid+1;	/* +1 to conform to R standards */
+
+	retval = R_nc4_get_vara_numvarid( sx_nc, sx_numvarid, sx_start, sx_count );
+
+	UNPROTECT(1);
+	return( retval );
+}
+
+/***************************************************************************************
+ * Given a numeric varid, this reads the data from the file.
+ * Does not return on errors.
+ */
+SEXP R_nc4_get_vara_numvarid( SEXP sx_nc, SEXP sx_varid, SEXP sx_start, SEXP sx_count ) 
+{
+	int 	varid, ncid, ndims, len_start, len_count, i, j, ierr,
+		start_arg[MAX_NC_DIMS], count_arg[MAX_NC_DIMS],
+		*data_addr_i, missval_i, ndims_cgt1;
+	SEXP 	rv_data = R_NilValue /* -Wall */, sx_ncdf_var, sx_dim;
+	size_t	start[MAX_NC_DIMS], count[MAX_NC_DIMS], varsize[MAX_NC_DIMS], tot_var_size,
+		i_szt;
+	double	*data_addr_d, missval_d, missval_tol;
+	nc_type	vartype;
+
+	/*--------------------------------------------------------------------------- 
+	 * On entry, the following are guaranteed to be integers:
+	 *	varid
+	 *	*start
+	 *	*count
+	 *
+	 * Note that varid, start, and/or count could be a single '-1' if the user
+	 * has not specified the start and count to use.
+	 * 'sx_nc' is guaranteed to be the full object of class 'ncdf'.
+	 *----------------------------------------------------------------------------*/
+
+
+	varid = INTEGER(sx_varid)[0];
+	ncid  = INTEGER(R_ncu4_getListElement( sx_nc, "id" ))[0];
+	sx_ncdf_var = R_ncu4_getListElement( sx_nc, "var" );
+
+	/*-----------------------------------------------------------------------
+	 * Copy passed start and count to local vars so we can modify them safely
+	 *----------------------------------------------------------------------*/
+	len_start = length(sx_start);
+	for( i=0; i<len_start; i++ )
+		start_arg[i] = INTEGER(sx_start)[i];
+	len_count = length(sx_count);
+	for( i=0; i<len_count; i++ )
+		count_arg[i] = INTEGER(sx_count)[i];
+	
+	/*-----------------------------------------
+	 * Get varid to use, if passed value is -1.
+	 *----------------------------------------*/
+	if( varid == -1 ) {
+		/*----------------------------------------------------
+		 * Get how many vars are in this file ... if only one,
+		 * use that one.  Otherwise, signal error.
+		 *---------------------------------------------------*/
+		varid = R_ncu4_varid_onlyvar( ncid );
+		if( varid == -1 ) 
+			error( "Error: no var specified, and the file has more than one valid var!" );
+		}
+	else
+		varid--;	/* go from R to C indexing */
+	
+	/*--------------------------------------------------------
+	 * Get # of dims for this var, as a check to make sure any
+	 * passed 'start' and 'count' are correct.
+	 *-------------------------------------------------------*/
+	ierr = nc_inq_varndims( ncid, varid, &ndims );
+	if( ierr != NC_NOERR )
+		error( "Internal error in ncdf package, routine R_nc4_get_vara_numvarid: failed to get ndims for var!\n" );
+
+	/*------------------------------------------------------
+	 * Get our variable's size, and the start & count to use
+	 *-----------------------------------------------------*/
+	R_ncu4_get_varsize( ncid, varid, ndims, varsize );
+	R_ncu4_calc_start_count( ncid, varid, start_arg, len_start, count_arg, len_count, 
+			varsize, ndims, start, count );
+
+	/*------------------------------------------------------------
+	 * Allocate space for data, depending on the type of var it is
+	 *-----------------------------------------------------------*/
+	ierr = nc_inq_vartype( ncid, varid, &vartype );
+	if( ierr != NC_NOERR )
+		error( "Internal error in ncdf package, routine R_nc4_get_vara_numvarid: failed to get type for var!\n" );
+
+	tot_var_size = 1L;
+	for( i=0; i<ndims; i++ ) {
+		tot_var_size *= count[i];
+		}
+
+	switch( vartype ) {
+		case NC_CHAR:
+			error( "chars not handled yet, use old interface" );
+			break;
+
+		case NC_BYTE:
+		case NC_SHORT:
+		case NC_INT:
+			/*---------------
+			 * Allocate space
+			 *--------------*/
+			PROTECT( rv_data = allocVector( INTSXP, tot_var_size ));
+			data_addr_i = &(INTEGER(rv_data)[0]);	/* Is this guaranteed to work?  Dunno. */
+
+			/*--------------
+			 * Read the data
+			 *-------------*/
+			ierr        = nc_get_vara_int( ncid, varid, start, count, data_addr_i );
+			if( ierr != NC_NOERR )
+				error( "Error while trying to read int data from file!" );
+
+			/*---------------------
+			 * Handle missing value
+			 *--------------------*/
+			ierr = nc_get_att_int( ncid, varid, "missing_value", &missval_i );
+			if( ierr != NC_NOERR )
+				/* No missing value attribute found, use default value */
+				missval_i = NC_FILL_INT;
+			for( i_szt=0L; i_szt<tot_var_size; i_szt++ ) 
+				if( data_addr_i[i_szt] == missval_i )
+					data_addr_i[i_szt] = NA_INTEGER;
+			break;
+
+		case NC_FLOAT:
+		case NC_DOUBLE:
+			/*---------------
+			 * Allocate space
+			 *--------------*/
+			PROTECT( rv_data = allocVector( REALSXP, tot_var_size ));
+			data_addr_d = &(REAL(rv_data)[0]);	/* Is this guaranteed to work?  Dunno. */
+
+			/*--------------
+			 * Read the data
+			 *-------------*/
+			ierr        = nc_get_vara_double( ncid, varid, start, count, data_addr_d );
+			if( ierr != NC_NOERR )
+				error( "Error while trying to read real data from file!" );
+
+			/*---------------------
+			 * Handle missing value
+			 *--------------------*/
+			ierr = nc_get_att_double( ncid, varid, "missing_value", &missval_d );
+			if( ierr != NC_NOERR )
+				/* No missing value attribute found, use default value */
+				missval_d = 1.e30;
+			missval_tol = 1.e-5*fabs(missval_d);
+			for( i_szt=0L; i_szt<tot_var_size; i_szt++ ) 
+				if( fabs(data_addr_d[i_szt] - missval_d) < missval_tol )
+					data_addr_d[i_szt] = NA_REAL;
+			break;
+
+		default:
+			error( "unhandled var type when allocating var space in R_nc4_get_vara_numvarid");
+		}
+
+	/*-----------------------------------------
+	 * Set our dims (note: non-degenerate only)
+	 *----------------------------------------*/
+	ndims_cgt1 = 0;  
+	for( i=0; i<ndims; i++ )
+		if( count[i] > 1 )
+			ndims_cgt1++;
+	if( ndims_cgt1 == 0 ) {
+		PROTECT( sx_dim = allocVector( INTSXP, 1 ));
+		INTEGER(sx_dim)[0] = 1;
+		}
+	else
+		{
+		PROTECT( sx_dim = allocVector( INTSXP, ndims_cgt1 ));
+		j = 0;
+		for( i=0; i<ndims; i++ )
+			if( count[i] > 1 ) {
+				INTEGER(sx_dim)[ndims_cgt1-j-1] = count[i];
+				j++;
+				}
+		}
+	setAttrib( rv_data, R_DimSymbol, sx_dim );
+
+	UNPROTECT(2);
+	return(rv_data);
+}
+
+/*******************************************************************************
+ * Internal utility function to get the vector of the variable's dim sizes.
+ * Returns 0 on success, -1 if an error is encountered.
+ */
+int R_ncu4_get_varsize( int ncid, int varid, int ndims, size_t *varsize )
+{
+	int ierr, i, dimids[MAX_NC_DIMS];
+	size_t len;
+
+	ierr = nc_inq_vardimid( ncid, varid, dimids );
+	if( ierr != NC_NOERR ) {
+		error( "Internal error in ncdf package, routine R_ncu4_get_varsize: error while reading file to get var's dimids!\n" );
+		return(-1);
+		}
+
+	for( i=0; i<ndims; i++ ) {
+		ierr = nc_inq_dimlen( ncid, dimids[i], &len );
+		if( ierr != NC_NOERR ) {
+			error( "Internal error in ncdf package, routine R_ncu4_get_varsize: error while reading file to get dim's length!\n" );
+			return(-1);
+			}
+		varsize[i] = len;
+		}
+
+	return(0);
+}
+
+/*******************************************************************************
+ * Internal utility function that returns '1' if the passed var name is
+ * the name of a dimvar, '0' if it is NOT the name of a dimvar, and '-1' on error.
+ */
+int R_ncu4_isdimvar( int ncid, char *name ) 
+{
+	int 	i, ndims, ierr;
+	char 	dimname[MAX_NC_NAME];
+
+	ierr = nc_inq_ndims( ncid, &ndims );
+	if( ierr != NC_NOERR ) {
+		error( "Internal error in ncdf package, routine R_ncu4_isdimvar: error while reading file to get ndims!\n" );
+		return( -1 );
+		}
+
+	for( i=0; i<ndims; i++ ) {
+		ierr = nc_inq_dimname( ncid, i, dimname );
+		if( ierr != NC_NOERR ) {
+			error( "Internal error in ncdf package, routine R_ncu4_isdimvar: error while reading file to get dim name!\n" );
+			return( -1 );
+			}
+		if( strcmp( name, dimname ) == 0 )
+			return(1);
+		}
+
+	return(0);
+}
+
+/*********************************************************************************
+ * Internal utility function to get an element from a list and return it,
+ * given the name.
+ */
+SEXP R_ncu4_getListElement(SEXP list, char *str)
+{
+	SEXP elmt = R_NilValue, names = getAttrib(list, R_NamesSymbol);
+	int i;
+
+/*Rprintf( "list has %d elements; looking for one named %s\n", length(list), str);*/
+	for (i = 0; i < length(list); i++) {
+/*Rprintf( "element %d is named %s\n", i, CHAR(STRING_ELT(names, i)) );*/
+		if(strcmp(CHAR(STRING_ELT(names, i)), str) == 0) {
+			return(VECTOR_ELT(list, i));
+			}
+		}
+
+Rprintf( "warning, no match found for element %s\n", str );
+	return elmt;
+}
+
+/*********************************************************************************
+ * Read vlen strings given the numeric varid, start, and count to use
+ */
+SEXP R_nc4_get_vara_string( SEXP sx_nc, SEXP sx_varid, SEXP sx_start, SEXP sx_count ) 
+{
+	SEXP	sx_retval, sx_retnames, sx_retstrings, sx_reterror;
+	int	i, ierr, nchar, varid, ncid, ndims, count_int[MAX_NC_DIMS], start_int[MAX_NC_DIMS], len_count, len_start; 
+	size_t	count[MAX_NC_DIMS], start[MAX_NC_DIMS], tot_count, isz;
+	char 	**ss;
+
+	/* Convert passed parameters (which are in R format) into C format */
+	ncid  = INTEGER(sx_nc   )[0];
+	varid = INTEGER(sx_varid)[0];
+
+	len_start = length(sx_start);
+	for( i=0; i<len_start; i++ ) {
+		start_int[i] = INTEGER(sx_start)[i];
+		start    [i] = (size_t)(start_int[i]);
+		}
+
+	len_count = length(sx_count);
+	for( i=0; i<len_count; i++ ) {
+		count_int[i] = INTEGER(sx_count)[i];
+		count    [i] = (size_t)(count_int[i]);
+		}
+
+	PROTECT( sx_retval   = allocVector( VECSXP, 2 ));       /* 2 elements in the returned list: $error, $strings */
+
+	/* Set the names for the returned list */
+	PROTECT( sx_retnames = allocVector( STRSXP, 2 ));       /* 2 elements in the returned list */
+	SET_STRING_ELT( sx_retnames, 0, mkChar("error") );
+	SET_STRING_ELT( sx_retnames, 1, mkChar("data") );
+	setAttrib( sx_retval, R_NamesSymbol, sx_retnames );
+	UNPROTECT(1); 
+
+	/* Set the return error code */
+	PROTECT( sx_reterror = allocVector( INTSXP, 1 ));
+	INTEGER( sx_reterror)[0] = 0;
+
+	/* Get number of dims in the var */
+	ierr = nc_inq_varndims( ncid, varid, &ndims );
+
+	/*--------------------------------------------------------------
+	 * At this point we have all the C values we need:
+	 *  	ncid
+	 *	varid (numeric)
+	 *	ndims
+	 *	start
+	 *	count
+	 *---------------------------------------------------------------*/
+	tot_count = 1L;
+	for( i=0; i<ndims; i++ ) 
+	 	tot_count *= count[i];
+
+	ss = (char **)malloc( sizeof( char *) * tot_count );
+	if( ss == NULL ) {
+		INTEGER( sx_reterror)[0] = -1;
+		error("ncdf4 library: routine R_nc4_get_vara_string: Error trying to allocate space to read the vlen strings: total count of strings requested: %ld\n", tot_count );
+		}
+
+	if( (ierr = nc_get_vara_string( ncid, varid, start, count, ss )) != 0 ) {
+		INTEGER( sx_reterror)[0] = -2;
+		error("ncdf4 library: routine R_nc4_get_vara_string: Error reading vlen strings: %s\n",
+			nc_strerror(ierr));
+		}
+
+	PROTECT( sx_retstrings = allocVector( STRSXP, tot_count ));
+	for( isz=0L; isz<tot_count; isz++ ) {
+		nchar = strlen( ss[isz] );
+		SET_STRING_ELT( sx_retstrings, isz, mkChar(ss[isz]) );
+		}
+
+	SET_VECTOR_ELT( sx_retval, 0, sx_reterror   );
+	SET_VECTOR_ELT( sx_retval, 1, sx_retstrings );
+
+	UNPROTECT(3);	
+
+	/* Free netcdf string storage */
+	nc_free_string( tot_count, ss );
+
+	return( sx_retval );
 }
 

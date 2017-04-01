@@ -6,7 +6,7 @@
 }
 \usage{
  ncvar_get(nc, varid=NA, start=NA, count=NA, verbose=FALSE,
- signedbyte=TRUE, collapse_degen=TRUE)
+ signedbyte=TRUE, collapse_degen=TRUE, raw_datavals=FALSE )
 }
 \arguments{
  \item{nc}{An object of class \code{ncdf4} (as returned by either 
@@ -42,6 +42,9 @@
  on-disk byte variables are interpreted as unsigned.}
  \item{collapse_degen}{If TRUE (the default), then degenerate (length==1) dimensions
  in the returned array are removed.}
+ \item{raw_datavals}{If TRUE, then the actual raw data values from the
+ file are returned with no conversion to NA (if equal to the missing value/fill value) or
+ scale/offset applied. Default is FALSE.}
 }
 \references{
  http://dwpierce.com/software

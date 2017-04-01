@@ -96,23 +96,6 @@ ncatt_put_inner = function( ncid, varid, attname, attval, prec=NA, verbose=FALSE
 	# attribute to create.
 	#-------------------------------------------------------------
 
-	#---------------------------------------------------------
-	# Get the netCDF function to call ... this always depends
-	# exclusively on the storage mode of the attval
-	#---------------------------------------------------------
-	if( storage.mode(attval) == "integer" )
-		funcname <- "R_nc4_put_att_int"
-	else if( storage.mode(attval) == "double" )
-		funcname <- "R_nc4_put_att_double"
-	else if( storage.mode(attval) == "character")
-		funcname <- "R_nc4_put_att_text"
-	else if( storage.mode(attval) == "logical")
-		funcname <- "R_nc4_put_att_logical"
-	else
-		stop(paste("ncatt_put: error, passed an attribute with a storage mode not handled.  Att name:",attname,"Att value:",attval,"Storage mode passed:",storage.mode(attval),".  Handled types: integer double character"))
-
-	if( verbose ) print(paste("ncatt_put_inner: using function",funcname))
-
 	#-------------------------------------------------------------
 	# Get the type of attribute to create.  This follows the var's
 	# type, in general, but can be manually overridden.
@@ -186,23 +169,85 @@ ncatt_put_inner = function( ncid, varid, attname, attval, prec=NA, verbose=FALSE
 	if( ! definemode )
 		nc_redef(ncid)
 
+	#---------------------------------------------------------
+	# Get the netCDF function to call ... this always depends
+	# exclusively on the storage mode of the attval
+	#---------------------------------------------------------
 	rv     <- list()
 	rv$error <- -1
-	rv <- .C(funcname,
-		as.integer(ncid),
-		as.integer(varid),
-		as.character(attname),
-		as.integer(typetocreate),
-		as.integer(length(attval)),
-		attval,
-		error=as.integer(rv$error),
-		PACKAGE="ncdf4",
-		NAOK=TRUE )
-	if( rv$error != 0 ) {
-		print(paste("Error in ncatt_put, while writing attribute",
-			attname,"with value",attval))
-		stop(paste("Error return from C call",funcname,"for attribute",attname))
+	if( storage.mode(attval) == "integer" ) {
+		rv <- .C("R_nc4_put_att_int",
+			as.integer(ncid),
+			as.integer(varid),
+			as.character(attname),
+			as.integer(typetocreate),
+			as.integer(length(attval)),
+			attval,
+			error=as.integer(rv$error),
+			PACKAGE="ncdf4",
+			NAOK=TRUE )
+		if( rv$error != 0 ) {
+			print(paste("Error in ncatt_put, while writing attribute",
+				attname,"with value",attval))
+			stop(paste("Error return from C call R_nc4_put_att_int for attribute",attname))
+			}
 		}
+
+	else if( storage.mode(attval) == "double" ) {
+		rv <- .C("R_nc4_put_att_double",
+			as.integer(ncid),
+			as.integer(varid),
+			as.character(attname),
+			as.integer(typetocreate),
+			as.integer(length(attval)),
+			attval,
+			error=as.integer(rv$error),
+			PACKAGE="ncdf4",
+			NAOK=TRUE )
+		if( rv$error != 0 ) {
+			print(paste("Error in ncatt_put, while writing attribute",
+				attname,"with value",attval))
+			stop(paste("Error return from C call R_nc4_put_att_double for attribute",attname))
+			}
+		}
+
+	else if( storage.mode(attval) == "character") {
+		rv <- .C("R_nc4_put_att_text",
+			as.integer(ncid),
+			as.integer(varid),
+			as.character(attname),
+			as.integer(typetocreate),
+			as.integer(length(attval)),
+			attval,
+			error=as.integer(rv$error),
+			PACKAGE="ncdf4",
+			NAOK=TRUE )
+		if( rv$error != 0 ) {
+			print(paste("Error in ncatt_put, while writing attribute",
+				attname,"with value",attval))
+			stop(paste("Error return from C call R_nc4_put_att_text for attribute",attname))
+			}
+		}
+
+	else if( storage.mode(attval) == "logical") {
+		rv <- .C("R_nc4_put_att_logical",
+			as.integer(ncid),
+			as.integer(varid),
+			as.character(attname),
+			as.integer(typetocreate),
+			as.integer(length(attval)),
+			attval,
+			error=as.integer(rv$error),
+			PACKAGE="ncdf4",
+			NAOK=TRUE )
+		if( rv$error != 0 ) {
+			print(paste("Error in ncatt_put, while writing attribute",
+				attname,"with value",attval))
+			stop(paste("Error return from C call R_nc4_put_att_logical for attribute",attname))
+			}
+		}
+	else
+		stop(paste("ncatt_put: error, passed an attribute with a storage mode not handled.  Att name:",attname,"Att value:",attval,"Storage mode passed:",storage.mode(attval),".  Handled types: integer double character"))
 
 	if( ! definemode )
 		nc_enddef(ncid)

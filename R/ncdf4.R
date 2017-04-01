@@ -129,7 +129,7 @@
 #======================================================================================================
 nc_version <- function() {
 	
-	return("ncdf4_1.15_20151203")
+	return("ncdf4_1.16_20170401")
 
 }
 
@@ -1032,7 +1032,7 @@ ncvar_change_missval <- function( nc, varid, missval ) {
 		stop("ncvar_change_missval: the netcdf file was NOT opened in write mode!")
 
 	idobj <- vobjtovarid4( nc, varid )	# object of type 'ncid', NOT just a simple integer
-	if( idobj == -1 ) 
+	if( idobj$id == -1 ) 
 		stop(paste("error: could not find passed variable in the specified netcdf file. Are you sure it's actually in that file?"))
 	idx   <- idobj$list_index
 	if( idx < 1 )
@@ -1474,27 +1474,6 @@ ncvar_add <- function( nc, v, verbose=FALSE, indefine=FALSE ) {
 	newvar$id    <- -1
 	newvar$error <- -1
 
-	#-----------------------------------------------------------
-	# Select the routine we will be using to create the variable
-	# based on its precision
-	#-----------------------------------------------------------
-	if( verbose )
-		print(paste("ncvar_add: creating",v$prec,"precision var",v$name))
-	if( (v$prec == "integer") || (v$prec == "int") )
-		funcname <- "R_nc4_def_var_int"
-	else if( v$prec == "short" )
-		funcname <- "R_nc4_def_var_short"
-	else if( (v$prec == "float"))
-		funcname <- "R_nc4_def_var_float"
-	else if( v$prec == "double" )
-		funcname <- "R_nc4_def_var_double"
-	else if( v$prec == "char" )
-		funcname <- "R_nc4_def_var_char"
-	else if( v$prec == "byte" )
-		funcname <- "R_nc4_def_var_byte"
-	else
-		stop(paste("internal error in nc_create: var has unknown precision:",v$prec,". Known vals: short float double integer char byte"))
-
 	#-----------------------------------------------------------------------
 	# Figure out the ncid to use.  If this var is in the root group, it will
 	# just be the ncid.  Otherwise, it will be the group id
@@ -1522,17 +1501,75 @@ ncvar_add <- function( nc, v, verbose=FALSE, indefine=FALSE ) {
 	name2use <- nc4_basename( v$name )
 	if( verbose ) print(paste('ncvar_add: ncid2use=', ncid2use, 'name2use=', name2use ))
 
-	#---------------------------------
-	# Now actually create the variable
-	#---------------------------------
-	newvar<-.C(funcname,
-		as.integer(ncid2use),
-		as.character(name2use),
-		as.integer(v$ndims),
-		as.integer(dimids),	
-		id=as.integer(newvar$id),
-		error=as.integer(newvar$error),
-		PACKAGE="ncdf4")
+	#--------------------------------------------------------------
+	# Now actually create the variable.  Select the routine we will 
+	# be using to create the variable based on its precision
+	#--------------------------------------------------------------
+	if( verbose )
+		print(paste("ncvar_add: creating",v$prec,"precision var",v$name))
+
+	if( (v$prec == "integer") || (v$prec == "int") )
+		newvar<-.C("R_nc4_def_var_int",
+			as.integer(ncid2use),
+			as.character(name2use),
+			as.integer(v$ndims),
+			as.integer(dimids),	
+			id=as.integer(newvar$id),
+			error=as.integer(newvar$error),
+			PACKAGE="ncdf4")
+
+	else if( v$prec == "short" )
+		newvar<-.C("R_nc4_def_var_short",
+			as.integer(ncid2use),
+			as.character(name2use),
+			as.integer(v$ndims),
+			as.integer(dimids),	
+			id=as.integer(newvar$id),
+			error=as.integer(newvar$error),
+			PACKAGE="ncdf4")
+
+	else if( (v$prec == "float"))
+		newvar<-.C("R_nc4_def_var_float",
+			as.integer(ncid2use),
+			as.character(name2use),
+			as.integer(v$ndims),
+			as.integer(dimids),	
+			id=as.integer(newvar$id),
+			error=as.integer(newvar$error),
+			PACKAGE="ncdf4")
+
+	else if( v$prec == "double" )
+		newvar<-.C("R_nc4_def_var_double",
+			as.integer(ncid2use),
+			as.character(name2use),
+			as.integer(v$ndims),
+			as.integer(dimids),	
+			id=as.integer(newvar$id),
+			error=as.integer(newvar$error),
+			PACKAGE="ncdf4")
+
+	else if( v$prec == "char" )
+		newvar<-.C("R_nc4_def_var_char",
+			as.integer(ncid2use),
+			as.character(name2use),
+			as.integer(v$ndims),
+			as.integer(dimids),	
+			id=as.integer(newvar$id),
+			error=as.integer(newvar$error),
+			PACKAGE="ncdf4")
+
+	else if( v$prec == "byte" )
+		newvar<-.C("R_nc4_def_var_byte",
+			as.integer(ncid2use),
+			as.character(name2use),
+			as.integer(v$ndims),
+			as.integer(dimids),	
+			id=as.integer(newvar$id),
+			error=as.integer(newvar$error),
+			PACKAGE="ncdf4")
+	else
+		stop(paste("internal error in nc_create: var has unknown precision:",v$prec,". Known vals: short float double integer char byte"))
+
 	if( verbose )
 		print(paste("nc_create: C call returned value",newvar$error))
 	if( newvar$error != 0 ) {
@@ -2107,7 +2144,7 @@ ncvar_put <- function( nc, varid=NA, vals=NULL, start=NA, count=NA, verbose=FALS
 # Argument 'signedbyte' can be TRUE for bytes to be interpreted as 
 # signed, or FALSE to be unsigned.
 #
-ncvar_get <- function( nc, varid=NA, start=NA, count=NA, verbose=FALSE, signedbyte=TRUE, collapse_degen=TRUE ) {
+ncvar_get <- function( nc, varid=NA, start=NA, count=NA, verbose=FALSE, signedbyte=TRUE, collapse_degen=TRUE, raw_datavals=FALSE ) {
 
 	if( class(nc) != "ncdf4" )
 		stop("first argument (nc) is not of class ncdf4!")
@@ -2232,7 +2269,8 @@ ncvar_get <- function( nc, varid=NA, start=NA, count=NA, verbose=FALSE, signedby
 	rv = ncvar_get_inner( ncid2use, varid2use, nc$var[[li]]$missval,
 			addOffset, scaleFact, start=start, count=count, 
 			verbose=verbose, signedbyte=signedbyte, 
-			collapse_degen=collapse_degen )
+			collapse_degen=collapse_degen, 
+			raw_datavals=raw_datavals )
 
 	#----------------------------------------------------------------
 	# If we are running in safe mode, close the file before returning

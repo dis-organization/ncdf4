@@ -22,7 +22,7 @@
  \item{dim}{The variable's dimension(s) (one or a list of "ncdim4" class objects, as returned by \code{ncdim_def}).  To create a variable with NO dimensions, pass an empty list ("list()"). }
  \item{missval}{The variable's missing value. If NO missing value is desired, pass a NULL, or omit this argument entirely. If a NaN missing value is desired, pass an NA.}
  \item{longname}{Optional longer name for the variable, which is assigned to the variable's "long_name" attribute. For example, a variable named "TS" might have the longname "Surface Temperature"}
- \item{prec}{Precision of the created variable.  Valid options: 'short' 'integer' 'float' 'double' 'char'.}
+ \item{prec}{Precision of the created variable.  Valid options: 'short' 'integer' 'float' 'double' 'char' 'byte'. See the special note below for how to create a character variable (strings).}
  \item{shuffle}{Turns on (if TRUE) or off (if FALSE, the default) the shuffle filter.  According to 
  netcdf docs, turning the shuffle filter on can improve compression for integer variables.
  Turning the shuffle filter on forces the created file to be in netcdf version 4 format,
@@ -93,6 +93,20 @@
  data is written out, any NAs are set equal to the missing value.  If not
  explicitly set by the user, a default value of 1.e30 is used for the missing
  value.
+
+ CHARACTER VARIABLES: Character-type variables (i.e., strings) are supported using the
+ original netcdf library approach, which is used because it is backwards compatible with
+ the older version 3 of the netcdf library. This approach uses fixed-size
+ strings, which should be declared to be the maximum length of the string
+ that will be stored. If the maximum string size is N, then an auxiliary
+ dimension is first defined, with values
+ running from 1 to N. For example, if N=12 and we call the new
+ auxiliary dimension "nchar", then the code could look like this:
+ dimnchar <- ncdim_def("nchar", "", 1:12, create_dimvar=FALSE ). The
+ character type variable is then defined with the first dimension being
+ this new auxiliary variable: varcolors <- ncvar_def("colors", "", list(dimnchar, dimcolorno),
+ prec="char" ). See the manual page for \code{\link[ncdf4]{ncvar_put}} for a worked example.
+
 }
 \author{David W. Pierce \email{dpierce@ucsd.edu}}
 \seealso{ 

@@ -596,7 +596,12 @@ ncvar_id_hier <- function( ncid, varname ) {
 # (or NA if the variable does not have such an attribute).  Any
 # read-in values that are equal to missval are set to NA.
 #
-ncvar_get_inner <- function( ncid, varid, missval, addOffset=0., scaleFact=1.0, start=NA, count=NA, verbose=FALSE, signedbyte=TRUE, collapse_degen=TRUE ) {
+# if raw_datavals==TRUE, then the actual raw data values from the
+# file are returned with no conversion to NA (if missing) or 
+# scale/offset applied
+#
+ncvar_get_inner <- function( ncid, varid, missval, addOffset=0., scaleFact=1.0, start=NA, count=NA, verbose=FALSE, signedbyte=TRUE, 
+		collapse_degen=TRUE, raw_datavals=FALSE ) {
 
 	if( ! is.numeric(ncid))
 		stop("Error, first arg passed to ncvar_get_inner (ncid) must be a simple C-style integer that is passed directly to the C api")
@@ -730,7 +735,13 @@ ncvar_get_inner <- function( ncid, varid, missval, addOffset=0., scaleFact=1.0, 
 			passed_missval = missval
 			imvstate = as.integer(2)
 			}
-		fixmiss = as.integer(1)
+
+		if( raw_datavals )
+			fixmiss = as.integer(0)	# setting 'raw_datavalues' to TRUE gives the actual raw numbers from the file, not processed at all
+		else
+			fixmiss = as.integer(1)
+
+		if( verbose ) print('about to call Rsx_nc4_get_vara_double...')
 		rv <- .Call("Rsx_nc4_get_vara_double", 
 			as.integer(ncid),
 			as.integer(varid),
@@ -742,6 +753,7 @@ ncvar_get_inner <- function( ncid, varid, missval, addOffset=0., scaleFact=1.0, 
 			PACKAGE="ncdf4")
 		if( rv$error != 0 ) 
 			stop("C function R_nc4_get_vara_double returned error")
+		if( verbose ) print('back from call to Rsx_nc4_get_vara_double...')
 		data = rv$data
 		}
 
@@ -867,7 +879,7 @@ ncvar_get_inner <- function( ncid, varid, missval, addOffset=0., scaleFact=1.0, 
 	# NOTE: if type is 3 or 4 (float or double), the missing
 	# value was already set by the C routine.
 	#----------------------------------------------------------
-	if( (precint != 5) && (precint != 3) && (precint != 4) ) {	# not char, float, or double
+	if( (!raw_datavals) && (precint != 5) && (precint != 3) && (precint != 4) ) {	# not char, float, or double
 		if( verbose ) print("ncvar_get: setting missing values to NA")
 		if( (precint==1) || (precint==2) || (precint==6) || (precint==7) || (precint==8) || (precint==9)) {
 			#--------------------------------------
@@ -893,10 +905,12 @@ ncvar_get_inner <- function( ncid, varid, missval, addOffset=0., scaleFact=1.0, 
 	#--------------------------------------
 	# Implement add_offset and scale_factor
 	#--------------------------------------
-	if( (scaleFact != 1.0) || (addOffset != 0.0) ) {
-		if( verbose ) 
-			print(paste("ncvar_get: implementing add_offset=", addOffset, " and scaleFact=", scaleFact ))
-		rv$data <- rv$data * scaleFact + addOffset
+	if( ! raw_datavals ) {
+		if( (scaleFact != 1.0) || (addOffset != 0.0) ) {
+			if( verbose ) 
+				print(paste("ncvar_get: implementing add_offset=", addOffset, " and scaleFact=", scaleFact ))
+			rv$data <- rv$data * scaleFact + addOffset
+			}
 		}
 
 	return(rv$data)

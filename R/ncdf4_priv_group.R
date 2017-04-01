@@ -24,7 +24,7 @@ nc_grpids <- function( root_id ) {
 
 	ngrps <- rv$ngrps
 	if( ngrps == 0 )
-		return		# if NO groups, return nothing
+		return()		# if NO groups, return nothing
 
 	#-----------------------------------------------------
 	# Now that we have the number of groups, get their IDs
