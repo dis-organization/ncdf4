@@ -10,9 +10,6 @@ all: clean winlibs
 
 winlibs:
 	"${R_HOME}/bin${R_ARCH_BIN}/Rscript.exe" "../tools/winlibs.R" ${VERSION}
-	mkdir -p ../inst
-	rm -Rf ../inst/share
-	cp -r ../windows/netcdf-${VERSION}/share ../inst/
 
 clean:
 	rm -Rf $(SHLIB) $(OBJECTS)
