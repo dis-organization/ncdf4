@@ -34,3 +34,26 @@ devtools::install_github("mdsumner/ncdf4")
 
 Example
 -------
+
+Read from Thredds (will only work in Windows 64-bit, not 32-bit).
+
+``` r
+u <- "http://coastwatch.pfeg.noaa.gov/erddap/griddap/erdQSwind3day"
+nc <- ncdf4::nc_open(u)
+class(nc)
+#> [1] "ncdf4"
+## note that "ncdf" argument is required to trigger use of ncdf4
+r <- raster::raster(u, ncdf = TRUE, varname = "x_wind")
+print(r)
+#> class       : RasterLayer 
+#> band        : 1  (of  3774  bands)
+#> dimensions  : 1201, 2881, 3460081  (nrow, ncol, ncell)
+#> resolution  : 0.125, 0.125  (x, y)
+#> extent      : -0.0625, 360.0625, -75.0625, 75.0625  (xmin, xmax, ymin, ymax)
+#> coord. ref. : +proj=longlat +datum=WGS84 +ellps=WGS84 +towgs84=0,0,0 
+#> data source : http://coastwatch.pfeg.noaa.gov/erddap/griddap/erdQSwind3day 
+#> names       : Zonal.Wind 
+#> z-value     : 932644800 
+#> zvar        : x_wind 
+#> level       : 1
+```

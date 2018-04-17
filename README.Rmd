@@ -43,4 +43,13 @@ devtools::install_github("mdsumner/ncdf4")
 ```
 ## Example
 
+Read from Thredds (will only work in Windows 64-bit, not 32-bit). 
 
+```{r}
+u <- "http://coastwatch.pfeg.noaa.gov/erddap/griddap/erdQSwind3day"
+nc <- ncdf4::nc_open(u)
+class(nc)
+## note that "ncdf" argument is required to trigger use of ncdf4
+r <- raster::raster(u, ncdf = TRUE, varname = "x_wind")
+print(r)
+```

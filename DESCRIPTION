@@ -9,3 +9,6 @@ SystemRequirements: netcdf library version 4.1 or later
 License: GPL (>= 3)
 URL: https://github.com/mdsumner/ncdf4, http://cirrus.ucsd.edu/~pierce/ncdf
 NeedsCompilation: yes
+Suggests: 
+    raster,
+    testthat
