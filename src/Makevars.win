@@ -3,7 +3,8 @@ PKG_CPPFLAGS = -I../windows/netcdf-${VERSION}/include \
 	-DHAVE_LIBUDUNITS2 -DHAVE_DECL_NC_RENAME_GRP=1
 
 PKG_LIBS = -L../windows/netcdf-${VERSION}/lib${R_ARCH} \
-	-lnetcdf -lhdf5_hl -lhdf5 -ludunits2 -lexpat -lszip -lz
+	-lnetcdf -lcurl -lhdf5_hl -lhdf5 -ludunits2 -lexpat -lszip -lz \
+	-lws2_32 -lcrypt32 -lwldap32
 
 all: clean winlibs
 
