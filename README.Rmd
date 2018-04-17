@@ -21,6 +21,12 @@ The goal of ncdf4 is to provide an "Interface to Unidata netCDF (Version 4 or Ea
 
 This fork of the CRAN package `ncdf4` is intended to update the Windows build process, and specifically to add support for Thredds. 
 
+Alternatives: 
+
+* Unidata provides [Visual Studio binaries](https://www.unidata.ucar.edu/downloads/netcdf/index.jsp) that can be used
+to put a build together 
+* pmjherman has [this repo](https://github.com/pmjherman/r-ncdf4-build-opendap-windows)
+
 ## Todo
 
 * check Makevars.win (assume can remove "DHAVE_LIBUDUNITS2" but what about "-DHAVE_DECL_NC_RENAME_GRP=1"?)
