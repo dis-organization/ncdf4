@@ -1,0 +1,6 @@
+^.*\.Rproj$
+^\.Rproj\.user$
+.*\.yml
+^windows$
+^inst/share$
+^config\.*
