@@ -1,4 +1,4 @@
-VERSION=4.4.1.1
+VERSION=4.4.1.1-dap
 PKG_CPPFLAGS = -I../windows/netcdf-${VERSION}/include \
 	-DHAVE_LIBUDUNITS2 -DHAVE_DECL_NC_RENAME_GRP=1
 
@@ -10,6 +10,9 @@ all: clean winlibs
 
 winlibs:
 	"${R_HOME}/bin${R_ARCH_BIN}/Rscript.exe" "../tools/winlibs.R" ${VERSION}
+	mkdir -p ../inst
+	rm -Rf ../inst/share
+	cp -r ../windows/netcdf-${VERSION}/share ../inst/
 
 clean:
 	rm -Rf $(SHLIB) $(OBJECTS)
