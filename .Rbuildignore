@@ -3,4 +3,6 @@
 .*\.yml
 ^windows$
 ^inst/share$
-^config\.*
+
+^\.travis\.yml$
+^appveyor\.yml$
