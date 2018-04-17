@@ -3,7 +3,7 @@ output: github_document
 ---
 
 [![Travis build status](https://travis-ci.org/mdsumner/ncdf4.svg?branch=master)](https://travis-ci.org/mdsumner/ncdf4)
-[![AppVeyor build status](https://ci.appveyor.com/api/projects/status/github/mdsumner/ncdf4?branch=master&svg=true)](https://ci.appveyor.com/project/mdsumner/ncdf4)
+[![AppVeyor build status](https://ci.appveyor.com/api/projects/status/github/mdsumner/ncdf4-7fwm0?branch=master&svg=true)](https://ci.appveyor.com/project/mdsumner/ncdf4-7fwm0)
 
 <!-- README.md is generated from README.Rmd. Please edit that file -->
 
