@@ -295,7 +295,7 @@ vobjtovarid4 <- function( nc, varid, verbose=FALSE, allowdimvar=TRUE) {
 	#------------------------------------------------------------
 	# If we get here, no dimvar with the requested name was found
 	#------------------------------------------------------------
-	print("vobjtovarid4: error #F: I could not find the requsted var (or dimvar) in the file!")
+	print("vobjtovarid4: error #F: I could not find the requested var (or dimvar) in the file!")
 	print(paste("var (or dimvar) name:",origvarid))
 	print(paste("file name:",nc$filename))
 	stop("Variable not found")
